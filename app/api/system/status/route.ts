@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { comfyUI } from "@/lib/comfyui"
+import { comfyUI } from "@/lib/comfyui-complete"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
 export async function GET() {
@@ -15,7 +15,7 @@ export async function GET() {
   try {
     status.comfyui = await comfyUI.isAvailable()
   } catch (error) {
-    console.log("ComfyUI check failed:", error.message)
+    console.log("ComfyUI check failed:", error?.message || "Unknown error")
   }
 
   // Check Gemini
@@ -27,7 +27,7 @@ export async function GET() {
       status.gemini = true
     }
   } catch (error) {
-    console.log("Gemini check failed:", error.message)
+    console.log("Gemini check failed:", error?.message || "Unknown error")
   }
 
   // Check Hugging Face
@@ -39,14 +39,14 @@ export async function GET() {
       status.huggingface = response.ok
     }
   } catch (error) {
-    console.log("Hugging Face check failed:", error.message)
+    console.log("Hugging Face check failed:", error?.message || "Unknown error")
   }
 
   // Check Instagram (basic token validation)
   try {
     status.instagram = !!(process.env.EMMA_INSTAGRAM_ACCESS_TOKEN || process.env.MAYA_INSTAGRAM_ACCESS_TOKEN)
   } catch (error) {
-    console.log("Instagram check failed:", error.message)
+    console.log("Instagram check failed:", error?.message || "Unknown error")
   }
 
   // Check scheduler (look for PID file)
@@ -54,7 +54,7 @@ export async function GET() {
     const fs = require("fs")
     status.scheduler = fs.existsSync("scheduler.pid")
   } catch (error) {
-    console.log("Scheduler check failed:", error.message)
+    console.log("Scheduler check failed:", error?.message || "Unknown error")
   }
 
   return NextResponse.json({

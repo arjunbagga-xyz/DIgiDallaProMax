@@ -70,7 +70,7 @@
 
 ## 4. Recommended Zero-Cost Approach
 
-```mermaid
+\`\`\`mermaid
 graph TD
     A[Bot Generates Image] --> B[Saves to Local/Cloud Storage]
     B --> C[Notification Sent]

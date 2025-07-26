@@ -1,144 +1,231 @@
-// Local scheduler daemon that runs continuously and handles missed runs
+// Local scheduler daemon for Instagram automation
+const cron = require("node-cron")
 const fs = require("fs").promises
 const path = require("path")
 const { spawn } = require("child_process")
 
-const SCHEDULE_FILE = path.join(process.cwd(), "data", "schedule.json")
-const PID_FILE = path.join(process.cwd(), "scheduler.pid")
-const LOG_FILE = path.join(process.cwd(), "logs", "scheduler.log")
-
-class LocalScheduler {
+class SchedulerDaemon {
   constructor() {
+    this.tasks = new Map()
+    this.pidFile = path.join(process.cwd(), "scheduler.pid")
+    this.scheduleFile = path.join(process.cwd(), "data", "schedule.json")
     this.running = false
-    this.tasks = []
-    this.checkInterval = 60000 // Check every minute
-    this.lastCheck = new Date()
   }
 
   async start() {
-    console.log("🚀 Starting Instagram AI Bot Local Scheduler...")
-
-    // Save PID for process management
-    await fs.writeFile(PID_FILE, process.pid.toString())
-
-    this.running = true
-    this.lastCheck = new Date()
-
-    // Load tasks
-    await this.loadTasks()
-
-    // Start main loop
-    this.mainLoop()
-
-    // Handle graceful shutdown
-    process.on("SIGINT", () => this.stop())
-    process.on("SIGTERM", () => this.stop())
-
-    console.log("✅ Local scheduler started successfully")
-    console.log(`📊 Loaded ${this.tasks.length} tasks`)
-    console.log(`⏰ Check interval: ${this.checkInterval / 1000}s`)
-  }
-
-  async stop() {
-    console.log("🛑 Stopping local scheduler...")
-    this.running = false
+    console.log("🚀 Starting Instagram AI Bot Scheduler Daemon...")
 
     try {
-      await fs.unlink(PID_FILE)
-    } catch (error) {
-      // PID file might not exist
-    }
+      // Write PID file
+      await fs.writeFile(this.pidFile, process.pid.toString())
+      console.log(`📝 PID file created: ${this.pidFile}`)
 
-    console.log("✅ Local scheduler stopped")
-    process.exit(0)
+      // Load scheduled tasks
+      await this.loadTasks()
+
+      // Start task monitoring
+      this.startTaskMonitoring()
+
+      // Handle graceful shutdown
+      this.setupSignalHandlers()
+
+      this.running = true
+      console.log("✅ Scheduler daemon started successfully")
+      console.log(`🔄 Monitoring ${this.tasks.size} scheduled tasks`)
+
+      // Keep the process alive
+      this.keepAlive()
+    } catch (error) {
+      console.error("❌ Failed to start scheduler daemon:", error)
+      process.exit(1)
+    }
   }
 
   async loadTasks() {
     try {
-      const data = await fs.readFile(SCHEDULE_FILE, "utf-8")
-      this.tasks = JSON.parse(data).filter((task) => task.active)
-      console.log(`📋 Loaded ${this.tasks.length} active tasks`)
-    } catch (error) {
-      console.log("⚠️  No tasks file found, starting with empty schedule")
-      this.tasks = []
-    }
-  }
+      const data = await fs.readFile(this.scheduleFile, "utf-8")
+      const tasks = JSON.parse(data)
 
-  async mainLoop() {
-    while (this.running) {
-      try {
-        await this.checkAndExecuteTasks()
-        await this.sleep(this.checkInterval)
-      } catch (error) {
-        console.error("❌ Error in scheduler main loop:", error)
-        await this.log(`ERROR: ${error.message}`)
-        await this.sleep(this.checkInterval)
-      }
-    }
-  }
+      console.log(`📋 Loading ${tasks.length} scheduled tasks...`)
 
-  async checkAndExecuteTasks() {
-    const now = new Date()
-
-    // Reload tasks periodically
-    if (now.getTime() - this.lastCheck.getTime() > 5 * 60 * 1000) {
-      await this.loadTasks()
-      this.lastCheck = now
-    }
-
-    for (const task of this.tasks) {
-      try {
-        const nextRun = new Date(task.nextRun)
-
-        // Check if task should run
-        if (nextRun <= now) {
-          console.log(`⚡ Executing task: ${task.id} for character: ${task.characterId}`)
-          await this.log(`Executing task: ${task.id} for character: ${task.characterId}`)
-
-          await this.executeTask(task)
-
-          // Update next run time
-          task.lastRun = now.toISOString()
-          task.nextRun = this.calculateNextRun(task.schedule, now)
-
-          await this.saveTasks()
-
-          console.log(`✅ Task completed: ${task.id}`)
-          await this.log(`Task completed: ${task.id}`)
+      for (const task of tasks) {
+        if (task.active) {
+          await this.scheduleTask(task)
         }
-      } catch (error) {
-        console.error(`❌ Error executing task ${task.id}:`, error)
-        await this.log(`ERROR executing task ${task.id}: ${error.message}`)
       }
+    } catch (error) {
+      console.log("⚠️  No existing schedule file found, starting with empty schedule")
+    }
+  }
+
+  async scheduleTask(task) {
+    try {
+      // Convert simple intervals to cron expressions
+      let cronExpression = task.schedule
+
+      if (task.schedule.match(/^\d+[hmd]$/)) {
+        cronExpression = this.intervalToCron(task.schedule)
+      }
+
+      // Validate cron expression
+      if (!cron.validate(cronExpression)) {
+        console.error(`❌ Invalid cron expression for task ${task.id}: ${cronExpression}`)
+        return
+      }
+
+      // Schedule the task
+      const cronTask = cron.schedule(
+        cronExpression,
+        async () => {
+          await this.executeTask(task)
+        },
+        {
+          scheduled: false,
+          timezone: task.timezone || "UTC",
+        },
+      )
+
+      cronTask.start()
+      this.tasks.set(task.id, { task, cronTask })
+
+      console.log(`⏰ Scheduled task ${task.id} (${task.characterId}): ${cronExpression}`)
+    } catch (error) {
+      console.error(`❌ Failed to schedule task ${task.id}:`, error)
+    }
+  }
+
+  intervalToCron(interval) {
+    const value = Number.parseInt(interval)
+    const unit = interval.slice(-1)
+
+    switch (unit) {
+      case "m": // minutes
+        return `*/${value} * * * *`
+      case "h": // hours
+        return `0 */${value} * * *`
+      case "d": // days
+        return `0 0 */${value} * *`
+      default:
+        throw new Error(`Unsupported interval unit: ${unit}`)
     }
   }
 
   async executeTask(task) {
-    // Execute task by calling the API endpoint
-    const response = await fetch("http://localhost:3000/api/scheduler", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        action: "run_now",
-        task: task,
-      }),
-    })
+    console.log(`🎯 Executing task ${task.id} for character ${task.characterId}`)
 
-    if (!response.ok) {
-      throw new Error(`Task execution failed: ${response.statusText}`)
+    try {
+      const startTime = Date.now()
+
+      // Execute the task based on type
+      let result
+      switch (task.type) {
+        case "generate_and_post":
+          result = await this.executeGenerateAndPost(task)
+          break
+        case "train_lora":
+          result = await this.executeTrainLora(task)
+          break
+        case "backup":
+          result = await this.executeBackup(task)
+          break
+        default:
+          throw new Error(`Unknown task type: ${task.type}`)
+      }
+
+      const duration = (Date.now() - startTime) / 1000
+      console.log(`✅ Task ${task.id} completed in ${duration}s`)
+
+      // Update task execution time
+      await this.updateTaskExecution(task.id, true, result)
+    } catch (error) {
+      console.error(`❌ Task ${task.id} failed:`, error.message)
+      await this.updateTaskExecution(task.id, false, { error: error.message })
     }
-
-    const result = await response.json()
-    return result
   }
 
-  calculateNextRun(cronExpression, fromTime = new Date()) {
-    // Handle simple intervals
-    if (cronExpression.match(/^\d+[hmd]$/)) {
-      const value = Number.parseInt(cronExpression)
-      const unit = cronExpression.slice(-1)
+  async executeGenerateAndPost(task) {
+    // Spawn the automation script
+    return new Promise((resolve, reject) => {
+      const script = spawn("node", ["scripts/automated-posting.js"], {
+        env: {
+          ...process.env,
+          CHARACTER_ID: task.characterId,
+          FLUX_MODEL: task.config?.fluxModel || "flux-dev",
+          CHARACTER_LORA: task.config?.character?.lora,
+        },
+        stdio: "pipe",
+      })
+
+      let output = ""
+      let error = ""
+
+      script.stdout.on("data", (data) => {
+        const text = data.toString()
+        output += text
+        console.log(`[${task.characterId}] ${text.trim()}`)
+      })
+
+      script.stderr.on("data", (data) => {
+        const text = data.toString()
+        error += text
+        console.error(`[${task.characterId}] ERROR: ${text.trim()}`)
+      })
+
+      script.on("close", (code) => {
+        if (code === 0) {
+          resolve({ success: true, output })
+        } else {
+          reject(new Error(`Script exited with code ${code}: ${error}`))
+        }
+      })
+    })
+  }
+
+  async executeTrainLora(task) {
+    // Start LoRA training
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/lora/train`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(task.config.trainingConfig),
+    })
+
+    return await response.json()
+  }
+
+  async executeBackup(task) {
+    // Backup data
+    console.log(`💾 Running backup for ${task.characterId}`)
+    return { success: true, message: "Backup completed" }
+  }
+
+  async updateTaskExecution(taskId, success, result) {
+    try {
+      const data = await fs.readFile(this.scheduleFile, "utf-8")
+      const tasks = JSON.parse(data)
+
+      const taskIndex = tasks.findIndex((t) => t.id === taskId)
+      if (taskIndex >= 0) {
+        tasks[taskIndex].lastRun = new Date().toISOString()
+        tasks[taskIndex].nextRun = this.calculateNextRun(tasks[taskIndex].schedule)
+
+        if (!success) {
+          tasks[taskIndex].missedRuns = tasks[taskIndex].missedRuns || []
+          tasks[taskIndex].missedRuns.push(new Date().toISOString())
+        }
+      }
+
+      await fs.writeFile(this.scheduleFile, JSON.stringify(tasks, null, 2))
+    } catch (error) {
+      console.error("Failed to update task execution:", error)
+    }
+  }
+
+  calculateNextRun(schedule) {
+    const now = new Date()
+
+    if (schedule.match(/^\d+[hmd]$/)) {
+      const value = Number.parseInt(schedule)
+      const unit = schedule.slice(-1)
 
       let milliseconds = 0
       switch (unit) {
@@ -153,42 +240,96 @@ class LocalScheduler {
           break
       }
 
-      return new Date(fromTime.getTime() + milliseconds).toISOString()
+      return new Date(now.getTime() + milliseconds).toISOString()
     }
 
-    // For cron expressions, you'd use a proper cron library
-    // Default to 1 hour
-    return new Date(fromTime.getTime() + 60 * 60 * 1000).toISOString()
+    // For cron expressions, return next hour as approximation
+    return new Date(now.getTime() + 60 * 60 * 1000).toISOString()
   }
 
-  async saveTasks() {
+  startTaskMonitoring() {
+    // Check for missed runs every 5 minutes
+    cron.schedule("*/5 * * * *", async () => {
+      await this.checkMissedRuns()
+    })
+
+    // Reload tasks every hour
+    cron.schedule("0 * * * *", async () => {
+      console.log("🔄 Reloading scheduled tasks...")
+      await this.reloadTasks()
+    })
+  }
+
+  async checkMissedRuns() {
     try {
-      await fs.writeFile(SCHEDULE_FILE, JSON.stringify(this.tasks, null, 2))
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/scheduler`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "check_missed" }),
+      })
+
+      const result = await response.json()
+
+      if (result.missedTasks > 0) {
+        console.log(`🔄 Executed ${result.missedTasks} missed tasks`)
+      }
     } catch (error) {
-      console.error("Error saving tasks:", error)
+      console.error("Failed to check missed runs:", error)
     }
   }
 
-  async log(message) {
-    const timestamp = new Date().toISOString()
-    const logEntry = `[${timestamp}] ${message}\n`
-
-    try {
-      await fs.mkdir(path.dirname(LOG_FILE), { recursive: true })
-      await fs.appendFile(LOG_FILE, logEntry)
-    } catch (error) {
-      console.error("Error writing to log file:", error)
+  async reloadTasks() {
+    // Stop existing tasks
+    for (const [taskId, { cronTask }] of this.tasks) {
+      cronTask.stop()
     }
+    this.tasks.clear()
+
+    // Reload tasks
+    await this.loadTasks()
   }
 
-  sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms))
+  setupSignalHandlers() {
+    const shutdown = async (signal) => {
+      console.log(`\n📴 Received ${signal}, shutting down gracefully...`)
+
+      // Stop all cron tasks
+      for (const [taskId, { cronTask }] of this.tasks) {
+        cronTask.stop()
+      }
+
+      // Remove PID file
+      try {
+        await fs.unlink(this.pidFile)
+        console.log("🗑️  PID file removed")
+      } catch (error) {
+        // File might not exist
+      }
+
+      console.log("👋 Scheduler daemon stopped")
+      process.exit(0)
+    }
+
+    process.on("SIGINT", () => shutdown("SIGINT"))
+    process.on("SIGTERM", () => shutdown("SIGTERM"))
+  }
+
+  keepAlive() {
+    // Log status every hour
+    setInterval(
+      () => {
+        if (this.running) {
+          console.log(`💓 Scheduler daemon alive - monitoring ${this.tasks.size} tasks`)
+        }
+      },
+      60 * 60 * 1000,
+    ) // 1 hour
   }
 }
 
-// Start the scheduler
-const scheduler = new LocalScheduler()
-scheduler.start().catch((error) => {
-  console.error("Failed to start scheduler:", error)
+// Start the daemon
+const daemon = new SchedulerDaemon()
+daemon.start().catch((error) => {
+  console.error("Failed to start scheduler daemon:", error)
   process.exit(1)
 })

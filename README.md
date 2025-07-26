@@ -1,95 +1,374 @@
-# Instagram AI Character Bot
+# 🤖 GenAI Instagram Automation System
 
-An automated system that generates consistent character images using Luma AI and posts them to Instagram on a schedule.
+A comprehensive, zero-cost Instagram automation system that generates AI images using multiple characters, trains custom LoRA models, and posts content automatically.
 
-## Features
+## 🌟 Features
 
-- **Consistent Character Generation**: Uses Luma AI's character reference feature to maintain character consistency across all generated images
-- **Dynamic Prompts**: Randomly selects from a library of prompts to create varied content
-- **Instagram Integration**: Automatically posts generated images to Instagram using the Graph API
-- **Flexible Scheduling**: Supports various scheduling options (cron jobs, Vercel Cron, etc.)
-- **Web Dashboard**: Monitor and control the automation through a user-friendly interface
+### Core Functionality
+- **Multi-Character System**: Create and manage multiple AI characters with unique personalities
+- **Custom LoRA Training**: Train personalized models for each character
+- **Automated Posting**: Schedule and post content to Instagram automatically
+- **Smart Prompt Generation**: AI-powered prompt creation using Gemini
+- **Local & Cloud Deployment**: Run locally or deploy to GitHub Actions
+- **Zero Cost Operation**: Uses only free and open-source tools
 
-## Setup Instructions
+### Character Management
+- Individual character profiles with backstories
+- Separate Instagram accounts per character
+- Custom LoRA models for consistent appearance
+- Ongoing narrative tracking
+- Independent posting schedules
 
-### 1. Environment Variables
+### Technical Features
+- **ComfyUI Integration**: Professional AI image generation
+- **Flux Model Support**: State-of-the-art image quality
+- **Vercel Blob Storage**: Efficient image and model storage
+- **GitHub Actions**: Free cloud automation
+- **Local Scheduling**: Missed-run recovery system
+- **Health Monitoring**: System status and performance tracking
 
-Copy `.env.example` to `.env.local` and fill in your credentials:
+## 🚀 Quick Start
 
+### Prerequisites
+- Node.js 18+ 
+- Python 3.8+ (for ComfyUI)
+- Git
+- Instagram Business Account
+
+### 1. Clone and Setup
 \`\`\`bash
-cp .env.example .env.local
+git clone <your-repo>
+cd instagram-automation
+npm install
+chmod +x setup.sh
+./setup.sh
 \`\`\`
 
-### 2. Luma AI Setup
+### 2. Environment Configuration
+\`\`\`bash
+cp .env.example .env
+# Edit .env with your API keys
+\`\`\`
 
-1. Sign up at [Luma AI](https://lumalabs.ai/)
-2. Get your API key from the dashboard
-3. Add it to your `.env.local` file
+### 3. Start the System
+\`\`\`bash
+# Development
+npm run dev
 
-### 3. Instagram Setup
+# Production
+npm run build
+npm start
 
-1. Create a Facebook App at [Facebook Developers](https://developers.facebook.com/)
-2. Add Instagram Basic Display product
-3. Convert your Instagram account to a Business account
-4. Generate a long-lived access token
-5. Get your Instagram Business Account ID
+# Local Scheduler
+npm run scheduler
+\`\`\`
 
-### 4. Character Reference Images
+## 📋 Environment Variables
 
-Upload 1-4 high-quality reference images of your character to a public URL (or use the file upload in the dashboard). These images should:
-- Show the same person/character
-- Be high quality and well-lit
-- Show the character clearly
-- Be diverse in angles/expressions for better consistency
+### Required APIs
+\`\`\`env
+# AI Generation
+GEMINI_API_KEY=your_gemini_key
+COMFYUI_URL=http://localhost:8188
+FLUX_MODEL_PATH=/path/to/flux/model
 
-### 5. Deployment Options
+# Storage
+VERCEL_BLOB_READ_WRITE_TOKEN=your_blob_token
+CLOUDINARY_URL=cloudinary://api_key:api_secret@cloud_name
+
+# Instagram (Optional - for posting)
+INSTAGRAM_ACCESS_TOKEN=your_token
+INSTAGRAM_BUSINESS_ACCOUNT_ID=your_account_id
+
+# Database
+DATABASE_URL=your_database_url
+
+# System
+PYTHON_PATH=/usr/bin/python3
+NODE_ENV=production
+\`\`\`
+
+## 🏗️ Architecture
+
+### System Components
+\`\`\`
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Dashboard UI  │────│  API Routes     │────│   ComfyUI       │
+│   (Next.js)     │    │  (Serverless)   │    │   (Local/Cloud) │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         │                       │                       │
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Character     │────│   Scheduler     │────│   Instagram     │
+│   Management    │    │   (Cron/GitHub) │    │   API           │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+\`\`\`
+
+### Data Flow
+1. **Character Creation** → Profile + LoRA Training
+2. **Prompt Generation** → AI-powered story continuation  
+3. **Image Generation** → ComfyUI + Flux + Custom LoRA
+4. **Content Scheduling** → Local cron or GitHub Actions
+5. **Instagram Posting** → Automated publishing
+6. **Monitoring** → Health checks and analytics
+
+## 🎯 Usage Guide
+
+### Creating Characters
+1. Navigate to Characters tab
+2. Click "Add Character"
+3. Fill in character details:
+   - Name and personality
+   - Backstory and narrative
+   - Instagram account info
+   - Upload reference images
+4. Train custom LoRA model
+5. Set posting schedule
+
+### Managing Content
+1. **Prompts Tab**: View and edit generated prompts
+2. **Models Tab**: Monitor LoRA training progress
+3. **Scheduling Tab**: Configure posting times
+4. **Monitoring Tab**: Track system health
+
+### Deployment Options
 
 #### Local Development
 \`\`\`bash
+npm run dev
+npm run scheduler  # In separate terminal
+\`\`\`
+
+#### GitHub Actions (Free)
+1. Push code to GitHub
+2. Set repository secrets
+3. Enable Actions workflow
+4. Automatic scheduling activated
+
+#### Self-Hosted Production
+\`\`\`bash
+npm run build
+npm start
+pm2 start ecosystem.config.js
+\`\`\`
+
+## 🔧 API Endpoints
+
+### Character Management
+- `GET /api/characters` - List all characters
+- `POST /api/characters` - Create new character
+- `PUT /api/characters/:id` - Update character
+- `DELETE /api/characters/:id` - Delete character
+
+### Content Generation
+- `POST /api/generate-image` - Generate character image
+- `POST /api/prompts/generate` - Create new prompt
+- `GET /api/prompts` - List prompts
+
+### LoRA Training
+- `POST /api/lora/train` - Start LoRA training
+- `GET /api/lora/status/:id` - Check training status
+- `GET /api/lora/models` - List trained models
+
+### Scheduling
+- `GET /api/scheduler` - Get schedule status
+- `POST /api/scheduler/run` - Manual execution
+- `PUT /api/scheduler/config` - Update schedule
+
+### System
+- `GET /api/system/status` - Health check
+- `GET /api/system/logs` - System logs
+
+## 🛠️ Customization
+
+### Adding New Characters
+\`\`\`javascript
+const character = {
+  name: "Luna",
+  personality: "Mystical and dreamy",
+  backstory: "A moon goddess who...",
+  instagramHandle: "@luna_dreams",
+  loraModelPath: "/models/luna.safetensors",
+  postingSchedule: "0 18 * * *" // Daily at 6 PM
+}
+\`\`\`
+
+### Custom Prompts
+\`\`\`javascript
+const promptTemplate = {
+  character: "{character_name}",
+  setting: "{current_narrative_context}",
+  style: "cinematic, high quality, detailed",
+  mood: "{character_personality_trait}"
+}
+\`\`\`
+
+### Scheduling Configuration
+\`\`\`javascript
+// Local cron format
+const schedules = {
+  "luna": "0 18 * * *",     // Daily 6 PM
+  "alex": "0 12 * * 1,3,5", // Mon/Wed/Fri noon
+  "sage": "0 9 * * 0"       // Sunday 9 AM
+}
+\`\`\`
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+#### ComfyUI Connection Failed
+\`\`\`bash
+# Check if ComfyUI is running
+curl http://localhost:8188/system_stats
+
+# Restart ComfyUI
+cd ComfyUI
+python main.py --listen
+\`\`\`
+
+#### LoRA Training Errors
+\`\`\`bash
+# Check Python environment
+python --version
+pip list | grep torch
+
+# Verify GPU availability
+python -c "import torch; print(torch.cuda.is_available())"
+\`\`\`
+
+#### Instagram API Issues
+- Verify Business Account setup
+- Check access token validity
+- Ensure proper permissions
+- Review rate limits
+
+#### Scheduling Problems
+\`\`\`bash
+# Check cron service
+systemctl status cron
+
+# View scheduler logs
+npm run logs
+
+# Manual test run
+npm run test-schedule
+\`\`\`
+
+### Performance Optimization
+
+#### Memory Usage
+- Monitor ComfyUI memory consumption
+- Implement model unloading between generations
+- Use efficient image formats (WebP)
+
+#### Generation Speed
+- Use appropriate Flux model size
+- Optimize ComfyUI workflows
+- Implement generation queuing
+
+#### Storage Management
+- Regular cleanup of temporary files
+- Compress stored images
+- Archive old content
+
+## 📊 Monitoring & Analytics
+
+### Health Checks
+- System uptime monitoring
+- API response times
+- Generation success rates
+- Instagram posting status
+
+### Performance Metrics
+- Average generation time
+- Memory usage patterns
+- Storage consumption
+- Error rates
+
+### Logging
+\`\`\`bash
+# View system logs
+tail -f logs/system.log
+
+# Check scheduler logs
+tail -f logs/scheduler.log
+
+# Monitor ComfyUI logs
+tail -f ComfyUI/logs/comfyui.log
+\`\`\`
+
+## 🔒 Security & Privacy
+
+### Data Protection
+- Local storage of sensitive data
+- Encrypted API keys
+- Secure file permissions
+- Regular security updates
+
+### Instagram Compliance
+- Respect rate limits
+- Follow community guidelines
+- Implement proper attribution
+- Monitor content quality
+
+## 💰 Cost Analysis
+
+### Zero-Cost Setup
+- **Compute**: GitHub Actions (2000 minutes/month free)
+- **Storage**: Vercel Blob (100GB free tier)
+- **AI**: Gemini API (free tier available)
+- **Hosting**: Vercel (hobby plan free)
+
+### Scaling Costs
+- Additional compute: $0.008/minute
+- Extra storage: $0.15/GB/month
+- Premium AI models: Variable pricing
+- Dedicated hosting: $20+/month
+
+## 🤝 Contributing
+
+### Development Setup
+\`\`\`bash
+git clone <repo>
+cd instagram-automation
 npm install
 npm run dev
 \`\`\`
 
-#### Vercel Deployment
-1. Deploy to Vercel
-2. Add environment variables in Vercel dashboard
-3. Set up Vercel Cron Jobs for scheduling
+### Code Standards
+- TypeScript strict mode
+- ESLint + Prettier
+- Conventional commits
+- Test coverage >80%
 
-#### Manual Scheduling
-Use the `/scripts/setup-scheduler.js` for local cron jobs or integrate with your preferred scheduling service.
+### Pull Request Process
+1. Fork repository
+2. Create feature branch
+3. Add tests
+4. Update documentation
+5. Submit PR
 
-## API Endpoints
+## 📄 License
 
-- `POST /api/generate-image` - Generate a new character image
-- `POST /api/post-to-instagram` - Post an image to Instagram
-- `POST /api/automation` - Run the full automation pipeline
+MIT License - see LICENSE file for details
 
-## Customization
+## 🆘 Support
 
-### Adding New Prompts
-Edit the `PROMPT_TEMPLATES` array in `/app/api/generate-image/route.ts` to add new scenarios for your character.
+### Documentation
+- [Setup Guide](./COMPREHENSIVE_SETUP_GUIDE.md)
+- [Deployment Guide](./DEPLOYMENT_GUIDE.md)
+- [Instagram API Guide](./INSTAGRAM_API_REALITY_CHECK.md)
+- [Zero Cost Setup](./ZERO_COST_SETUP.md)
 
-### Scheduling Options
-- **Vercel Cron**: Use Vercel's built-in cron jobs
-- **GitHub Actions**: Set up workflows for scheduling
-- **External Services**: Use services like Zapier or Make.com
-- **Local Cron**: Use the provided Node.js script
+### Community
+- GitHub Issues for bugs
+- Discussions for questions
+- Wiki for advanced guides
 
-## Legal Considerations
+### Professional Support
+Contact for enterprise deployments and custom integrations.
 
-- Ensure you have rights to use character reference images
-- Follow Instagram's Terms of Service
-- Consider disclosure requirements for AI-generated content
-- Respect rate limits and API usage guidelines
+---
 
-## Troubleshooting
-
-- **Image Generation Fails**: Check Luma API key and reference image URLs
-- **Instagram Posting Fails**: Verify access token and account permissions
-- **Character Inconsistency**: Use more reference images or higher quality images
-
-## Cost Considerations
-
-- Luma AI charges per image generation
-- Instagram Graph API is free but has rate limits
-- Consider your posting frequency vs. costs
+**⚡ Ready to automate your Instagram with AI? Start with `npm run dev` and create your first character!**
