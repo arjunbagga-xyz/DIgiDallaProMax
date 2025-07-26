@@ -65,6 +65,7 @@
     "@radix-ui/react-toggle-group": "latest",
     "@radix-ui/react-tooltip": "latest",
     "@vercel/blob": "latest",
+    "abort-controller": "latest",
     "ai": "^4.0.0",
     "child_process": "latest",
     "class-variance-authority": "^0.7.1",

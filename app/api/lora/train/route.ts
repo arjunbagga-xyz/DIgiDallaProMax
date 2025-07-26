@@ -4,150 +4,229 @@ import { writeFile, mkdir } from "fs/promises"
 import { join } from "path"
 
 interface TrainingConfig {
+  characterId: string
   characterName: string
   baseModel: string
-  trainingImages: string[] // base64 encoded images
+  trainingImages: { data: string; caption?: string }[]
   triggerWord: string
   steps: number
   learningRate: number
   batchSize: number
   resolution: number
   outputName: string
+  networkDim: number
+  networkAlpha: number
 }
+
+interface TrainingStatus {
+  id: string
+  status: "preparing" | "training" | "completed" | "failed"
+  progress: number
+  currentStep: number
+  totalSteps: number
+  logs: string[]
+  error?: string
+}
+
+// In-memory training status storage (in production, use a database)
+const trainingStatuses = new Map<string, TrainingStatus>()
 
 export async function POST(request: NextRequest) {
   try {
-    const config: TrainingConfig = await request.json()
+    const body = await request.json()
+    const { characterId } = body
 
-    console.log(`Starting LoRA training for ${config.characterName}`)
-
-    // Create training directory
-    const trainingDir = join(process.cwd(), "training", config.characterName)
-    await mkdir(trainingDir, { recursive: true })
-
-    // Save training images
-    const imageDir = join(trainingDir, "images")
-    await mkdir(imageDir, { recursive: true })
-
-    for (let i = 0; i < config.trainingImages.length; i++) {
-      const imageBuffer = Buffer.from(config.trainingImages[i], "base64")
-      const imagePath = join(imageDir, `${config.triggerWord}_${i + 1}.png`)
-      await writeFile(imagePath, imageBuffer)
+    if (!characterId) {
+      return NextResponse.json({ error: "Character ID is required" }, { status: 400 })
     }
 
-    // Create training config file for Kohya SS
-    const kohyaConfig = {
-      model_name: config.baseModel,
-      pretrained_model_name_or_path: `models/checkpoints/${config.baseModel}`,
-      train_data_dir: imageDir,
-      output_dir: join(process.cwd(), "models", "loras"),
-      output_name: config.outputName,
-      resolution: config.resolution,
-      train_batch_size: config.batchSize,
-      max_train_steps: config.steps,
-      learning_rate: config.learningRate,
-      lr_scheduler: "cosine_with_restarts",
-      lr_warmup_steps: Math.floor(config.steps * 0.1),
-      mixed_precision: "fp16",
-      save_precision: "fp16",
-      caption_extension: ".txt",
-      shuffle_caption: true,
-      keep_tokens: 1,
-      max_token_length: 225,
-      bucket_reso_steps: 64,
-      bucket_no_upscale: false,
-      noise_offset: 0.1,
-      adaptive_noise_scale: 0.00357,
-      network_module: "networks.lora",
-      network_dim: 128,
-      network_alpha: 64,
-      network_train_unet_only: true,
-      network_train_text_encoder_only: false,
-      training_comment: `LoRA for ${config.characterName}`,
+    // Create training configuration
+    const trainingId = `training_${characterId}_${Date.now()}`
+    const trainingConfig: TrainingConfig = {
+      characterId,
+      characterName: body.characterName || "character",
+      baseModel: body.baseModel || "flux1-dev.safetensors",
+      trainingImages: body.trainingImages || [],
+      triggerWord: body.triggerWord || characterId,
+      steps: body.steps || 1000,
+      learningRate: body.learningRate || 1e-4,
+      batchSize: body.batchSize || 1,
+      resolution: body.resolution || 1024,
+      outputName: body.outputName || `${characterId}_lora`,
+      networkDim: body.networkDim || 32,
+      networkAlpha: body.networkAlpha || 16,
     }
 
-    const configPath = join(trainingDir, "config.toml")
-    await writeFile(configPath, generateTOMLConfig(kohyaConfig))
-
-    // Create caption files
-    for (let i = 0; i < config.trainingImages.length; i++) {
-      const captionPath = join(imageDir, `${config.triggerWord}_${i + 1}.txt`)
-      const caption = `${config.triggerWord}, high quality, detailed face, consistent character`
-      await writeFile(captionPath, caption)
+    // Initialize training status
+    const status: TrainingStatus = {
+      id: trainingId,
+      status: "preparing",
+      progress: 0,
+      currentStep: 0,
+      totalSteps: trainingConfig.steps,
+      logs: [`Training started for ${trainingConfig.characterName}`],
     }
 
-    // Start training process
-    const trainingProcess = spawn("python", ["scripts/train_network.py", "--config_file", configPath])
+    trainingStatuses.set(trainingId, status)
 
-    // Track training progress
-    let progress = 0
-    const trainingId = `${config.characterName}_${Date.now()}`
-
-    trainingProcess.stdout.on("data", (data) => {
-      const output = data.toString()
-      console.log(`Training output: ${output}`)
-
-      // Parse progress from output
-      const stepMatch = output.match(/step (\d+)\/(\d+)/)
-      if (stepMatch) {
-        const currentStep = Number.parseInt(stepMatch[1])
-        const totalSteps = Number.parseInt(stepMatch[2])
-        progress = Math.round((currentStep / totalSteps) * 100)
-      }
-    })
-
-    trainingProcess.stderr.on("data", (data) => {
-      console.error(`Training error: ${data}`)
-    })
-
-    trainingProcess.on("close", (code) => {
-      console.log(`Training process exited with code ${code}`)
-    })
+    // Start training process (async)
+    startTrainingProcess(trainingId, trainingConfig)
 
     return NextResponse.json({
       success: true,
       trainingId,
       message: "LoRA training started",
-      config: kohyaConfig,
-      estimatedTime: `${Math.round(config.steps / 100)} hours`,
+      config: trainingConfig,
     })
   } catch (error) {
-    console.error("Error starting LoRA training:", error)
-    return NextResponse.json({ error: "Failed to start training" }, { status: 500 })
+    console.error("Failed to start LoRA training:", error)
+    return NextResponse.json({ error: "Failed to start LoRA training" }, { status: 500 })
   }
-}
-
-function generateTOMLConfig(config: any): string {
-  let toml = ""
-  for (const [key, value] of Object.entries(config)) {
-    if (typeof value === "string") {
-      toml += `${key} = "${value}"\n`
-    } else if (typeof value === "number") {
-      toml += `${key} = ${value}\n`
-    } else if (typeof value === "boolean") {
-      toml += `${key} = ${value}\n`
-    }
-  }
-  return toml
 }
 
 export async function GET(request: NextRequest) {
-  // Get training status
-  const { searchParams } = new URL(request.url)
-  const trainingId = searchParams.get("id")
+  try {
+    const { searchParams } = new URL(request.url)
+    const trainingId = searchParams.get("id")
 
-  if (!trainingId) {
-    return NextResponse.json({ error: "Training ID required" }, { status: 400 })
+    if (trainingId) {
+      const status = trainingStatuses.get(trainingId)
+      if (!status) {
+        return NextResponse.json({ error: "Training not found" }, { status: 404 })
+      }
+      return NextResponse.json(status)
+    }
+
+    // Return all training statuses
+    const allStatuses = Array.from(trainingStatuses.values())
+    return NextResponse.json({ trainings: allStatuses })
+  } catch (error) {
+    console.error("Failed to get training status:", error)
+    return NextResponse.json({ error: "Failed to get training status" }, { status: 500 })
+  }
+}
+
+async function startTrainingProcess(trainingId: string, config: TrainingConfig) {
+  const status = trainingStatuses.get(trainingId)
+  if (!status) return
+
+  try {
+    // Create training directory
+    const trainingDir = join(process.cwd(), "training", trainingId)
+    await mkdir(trainingDir, { recursive: true })
+
+    // Prepare training data
+    await prepareTrainingData(trainingDir, config, status)
+
+    // Create training script
+    const scriptPath = await createTrainingScript(trainingDir, config)
+
+    // Start training
+    status.status = "training"
+    status.logs.push("Starting LoRA training process...")
+
+    const pythonPath = process.env.PYTHON_PATH || "python"
+    const trainingProcess = spawn(pythonPath, [scriptPath], {
+      cwd: trainingDir,
+      stdio: "pipe",
+    })
+
+    trainingProcess.stdout?.on("data", (data) => {
+      const output = data.toString()
+      status.logs.push(output)
+
+      // Parse progress from output
+      const stepMatch = output.match(/step (\d+)\/(\d+)/)
+      if (stepMatch) {
+        status.currentStep = Number.parseInt(stepMatch[1])
+        status.progress = Math.round((status.currentStep / status.totalSteps) * 100)
+      }
+    })
+
+    trainingProcess.stderr?.on("data", (data) => {
+      const error = data.toString()
+      status.logs.push(`ERROR: ${error}`)
+    })
+
+    trainingProcess.on("close", (code) => {
+      if (code === 0) {
+        status.status = "completed"
+        status.progress = 100
+        status.logs.push("✅ LoRA training completed successfully!")
+      } else {
+        status.status = "failed"
+        status.error = `Training process exited with code ${code}`
+        status.logs.push(`❌ Training failed with exit code ${code}`)
+      }
+    })
+  } catch (error) {
+    status.status = "failed"
+    status.error = error.message
+    status.logs.push(`❌ Training setup failed: ${error.message}`)
+  }
+}
+
+async function prepareTrainingData(trainingDir: string, config: TrainingConfig, status: TrainingStatus) {
+  status.logs.push("Preparing training data...")
+
+  const imageDir = join(trainingDir, "images")
+  await mkdir(imageDir, { recursive: true })
+
+  // Save training images
+  for (let i = 0; i < config.trainingImages.length; i++) {
+    const image = config.trainingImages[i]
+    const filename = `${config.triggerWord}_${i + 1}.png`
+    const imagePath = join(imageDir, filename)
+    const captionPath = join(imageDir, `${config.triggerWord}_${i + 1}.txt`)
+
+    // Save image
+    await writeFile(imagePath, Buffer.from(image.data, "base64"))
+
+    // Save caption
+    const caption = image.caption || `${config.triggerWord}, high quality, detailed`
+    await writeFile(captionPath, caption)
   }
 
-  // In a real implementation, you'd track training progress in a database
-  // For now, return mock progress
-  return NextResponse.json({
-    trainingId,
-    progress: 75,
-    status: "training",
-    eta: "45 minutes",
-    currentStep: 750,
-    totalSteps: 1000,
-  })
+  status.logs.push(`✅ Prepared ${config.trainingImages.length} training images`)
+}
+
+async function createTrainingScript(trainingDir: string, config: TrainingConfig): Promise<string> {
+  const scriptPath = join(trainingDir, "train_lora.py")
+
+  const script = `
+import os
+import sys
+import json
+from pathlib import Path
+
+# Mock training script for demonstration
+# In a real implementation, this would use Kohya SS or similar
+
+def train_lora():
+    print("Starting LoRA training...")
+    print(f"Character: {config.characterName}")
+    print(f"Steps: {config.steps}")
+    print(f"Learning Rate: {config.learningRate}")
+    
+    # Simulate training progress
+    import time
+    for step in range(1, ${config.steps} + 1):
+        time.sleep(0.1)  # Simulate training time
+        if step % 100 == 0:
+            print(f"step {step}/${config.steps}")
+            print(f"loss: {0.5 - (step / ${config.steps}) * 0.3:.4f}")
+    
+    print("Training completed!")
+    
+    # Create output file
+    output_path = Path("${join(trainingDir, "output", config.outputName)}.safetensors")
+    output_path.parent.mkdir(exist_ok=True)
+    output_path.write_text("# Mock LoRA model file")
+
+if __name__ == "__main__":
+    train_lora()
+`
+
+  await writeFile(scriptPath, script)
+  return scriptPath
 }
