@@ -360,6 +360,113 @@ export default function AutomationDashboard() {
     }
   }
 
+  const toggleTask = async (taskId: string) => {
+    setIsLoading(true)
+    try {
+      const task = scheduledTasks.find((t) => t.id === taskId)
+      if (!task) return
+
+      const response = await fetch("/api/scheduler", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "toggle_task",
+          taskId,
+          active: !task.active,
+        }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: `Task ${task.active ? "paused" : "resumed"} successfully`,
+        })
+        loadScheduledTasks()
+      } else {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to toggle task")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to toggle task",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const deleteCharacter = async (characterId: string) => {
+    setIsLoading(true)
+    try {
+      const response = await fetch("/api/characters", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: characterId }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Character deleted successfully",
+        })
+        loadCharacters()
+      } else {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to delete character")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete character",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const generateAndPost = async (characterId: string) => {
+    await generateImage(characterId)
+    // In a real app, you would check if the image was generated successfully
+    // and then post to Instagram.
+    toast({
+      title: "Info",
+      description: "Image generated. Posting to Instagram is not implemented in this demo.",
+    })
+  }
+
+  const runScheduler = async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch("/api/scheduler", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "run_now" }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Scheduler executed successfully",
+        })
+        loadScheduledTasks()
+      } else {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to run scheduler")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to run scheduler",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const updateCharacter = async (characterId: string, updates: Partial<Character>) => {
     setIsLoading(true)
     try {
@@ -933,7 +1040,7 @@ export default function AutomationDashboard() {
                           variant="ghost"
                           onClick={() => {
                             if (confirm("Are you sure you want to delete this character?")) {
-                              // Delete character logic here
+                              deleteCharacter(character.id)
                             }
                           }}
                           className="text-red-500 hover:text-red-700"
@@ -997,9 +1104,7 @@ export default function AutomationDashboard() {
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => {
-                          // Generate and post logic
-                        }}
+                        onClick={() => generateAndPost(character.id)}
                         disabled={isLoading}
                       >
                         <Zap className="w-4 h-4 mr-1" />
@@ -1100,12 +1205,7 @@ export default function AutomationDashboard() {
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">Content Scheduling</h2>
               <div className="flex gap-2">
-                <Button
-                  onClick={() => {
-                    /* Run scheduler */
-                  }}
-                  disabled={isLoading}
-                >
+                <Button onClick={runScheduler} disabled={isLoading}>
                   {isLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
                   Run Now
                 </Button>
@@ -1327,7 +1427,12 @@ export default function AutomationDashboard() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Button size="sm" variant="ghost" disabled={isLoading}>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => toggleTask(task.id)}
+                              disabled={isLoading}
+                            >
                               {task.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                             </Button>
                           </TableCell>

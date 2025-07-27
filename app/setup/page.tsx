@@ -120,25 +120,31 @@ export default function SetupPage() {
               <div className="space-y-2">
                 <h4 className="font-medium">1. Environment Variables</h4>
                 <p className="text-sm text-gray-600">Configure API keys in .env.local</p>
-                <Button size="sm" variant="outline">
-                  Edit Environment
-                </Button>
+                <a href="https://github.com/your-username/your-repo/edit/main/.env.local" target="_blank" rel="noopener noreferrer">
+                  <Button size="sm" variant="outline">
+                    Edit Environment
+                  </Button>
+                </a>
               </div>
 
               <div className="space-y-2">
                 <h4 className="font-medium">2. Character Setup</h4>
                 <p className="text-sm text-gray-600">Create and configure your AI characters</p>
-                <Button size="sm" variant="outline">
-                  Manage Characters
-                </Button>
+                <a href="/#characters">
+                  <Button size="sm" variant="outline">
+                    Manage Characters
+                  </Button>
+                </a>
               </div>
 
               <div className="space-y-2">
                 <h4 className="font-medium">3. Instagram Accounts</h4>
                 <p className="text-sm text-gray-600">Connect Instagram business accounts</p>
-                <Button size="sm" variant="outline">
-                  Setup Instagram
-                </Button>
+                <a href="/#monitoring">
+                  <Button size="sm" variant="outline">
+                    Setup Instagram
+                  </Button>
+                </a>
               </div>
             </CardContent>
           </Card>
@@ -152,23 +158,29 @@ export default function SetupPage() {
               <div className="p-3 border rounded-lg">
                 <div className="font-medium mb-1">Local + GitHub Actions</div>
                 <div className="text-sm text-gray-600 mb-2">Recommended: Local primary, cloud backup</div>
-                <Button size="sm">Deploy Hybrid</Button>
+                <a href="/#deployment">
+                  <Button size="sm">Deploy Hybrid</Button>
+                </a>
               </div>
 
               <div className="p-3 border rounded-lg">
                 <div className="font-medium mb-1">Local Only</div>
                 <div className="text-sm text-gray-600 mb-2">Full control, unlimited generation</div>
-                <Button size="sm" variant="outline">
-                  Start Local
-                </Button>
+                <a href="/#deployment">
+                  <Button size="sm" variant="outline">
+                    Start Local
+                  </Button>
+                </a>
               </div>
 
               <div className="p-3 border rounded-lg">
                 <div className="font-medium mb-1">Cloud Only</div>
                 <div className="text-sm text-gray-600 mb-2">GitHub Actions serverless</div>
-                <Button size="sm" variant="outline">
-                  Deploy Cloud
-                </Button>
+                <a href="/#deployment">
+                  <Button size="sm" variant="outline">
+                    Deploy Cloud
+                  </Button>
+                </a>
               </div>
             </CardContent>
           </Card>
