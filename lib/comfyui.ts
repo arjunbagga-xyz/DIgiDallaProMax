@@ -1,162 +1,269 @@
-// ComfyUI integration with proper error handling
-interface ComfyUIWorkflow {
-  [key: string]: {
-    inputs: any
-    class_type: string
-  }
+// Complete ComfyUI integration with support for any model
+import { createWorkflowForModel } from "./comfyui-workflows"
+
+export interface ComfyUIConfig {
+  url: string
+  timeout: number
+}
+
+export interface GenerationRequest {
+  prompt: string
+  model: string
+  negativePrompt?: string
+  width?: number
+  height?: number
+  steps?: number
+  cfg?: number
+  guidance?: number
+  seed?: number
+  loraPath?: string
+  loraStrength?: number
+}
+
+export interface GenerationResult {
+  success: boolean
+  imageUrl?: string
+  imageData?: string
+  error?: string
+  executionTime?: number
+  seed?: number
 }
 
 export class ComfyUIClient {
-  private baseUrl: string
+  private config: ComfyUIConfig
+  private clientId: string
 
-  constructor(baseUrl = "http://localhost:8188") {
-    this.baseUrl = baseUrl
+  constructor(config: ComfyUIConfig) {
+    this.config = config
+    this.clientId = this.generateClientId()
   }
 
-  async isAvailable(): Promise<boolean> {
+  private generateClientId(): string {
+    return Math.random().toString(36).substring(2, 15)
+  }
+
+  async checkConnection(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/system_stats`)
+      const response = await fetch(`${this.config.url}/system_stats`, {
+        method: "GET",
+        timeout: 5000,
+      })
       return response.ok
     } catch (error) {
+      console.error("ComfyUI connection check failed:", error)
       return false
     }
   }
 
-  async generateImage(prompt: string, modelName: string, loraName?: string): Promise<string> {
-    if (!(await this.isAvailable())) {
-      throw new Error("ComfyUI is not available")
-    }
+  async getAvailableModels(): Promise<{ checkpoints: string[]; loras: string[]; vaes: string[] }> {
+    try {
+      const response = await fetch(`${this.config.url}/object_info`, {
+        method: "GET",
+        timeout: 10000,
+      })
 
-    const workflow = this.createWorkflow(prompt, modelName, loraName)
-
-    // Queue the workflow
-    const queueResponse = await fetch(`${this.baseUrl}/prompt`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: workflow }),
-    })
-
-    if (!queueResponse.ok) {
-      throw new Error(`Failed to queue workflow: ${queueResponse.statusText}`)
-    }
-
-    const queueResult = await queueResponse.json()
-    const promptId = queueResult.prompt_id
-
-    // Poll for completion
-    return await this.pollForCompletion(promptId)
-  }
-
-  private createWorkflow(prompt: string, modelName: string, loraName?: string): ComfyUIWorkflow {
-    const workflow: ComfyUIWorkflow = {
-      "1": {
-        inputs: {
-          text: prompt,
-          clip: ["4", 1],
-        },
-        class_type: "CLIPTextEncode",
-      },
-      "2": {
-        inputs: {
-          text: "",
-          clip: ["4", 1],
-        },
-        class_type: "CLIPTextEncode",
-      },
-      "3": {
-        inputs: {
-          seed: Math.floor(Math.random() * 1000000),
-          steps: 20,
-          cfg: 7.5,
-          sampler_name: "dpmpp_2m",
-          scheduler: "karras",
-          denoise: 1,
-          model: ["4", 0],
-          positive: ["1", 0],
-          negative: ["2", 0],
-          latent_image: ["5", 0],
-        },
-        class_type: "KSampler",
-      },
-      "4": {
-        inputs: {
-          ckpt_name: modelName,
-        },
-        class_type: "CheckpointLoaderSimple",
-      },
-      "5": {
-        inputs: {
-          width: 1024,
-          height: 1024,
-          batch_size: 1,
-        },
-        class_type: "EmptyLatentImage",
-      },
-      "6": {
-        inputs: {
-          samples: ["3", 0],
-          vae: ["4", 2],
-        },
-        class_type: "VAEDecode",
-      },
-      "7": {
-        inputs: {
-          filename_prefix: "instagram_bot",
-          images: ["6", 0],
-        },
-        class_type: "SaveImage",
-      },
-    }
-
-    // Add LoRA if specified
-    if (loraName) {
-      workflow["8"] = {
-        inputs: {
-          model: ["4", 0],
-          clip: ["4", 1],
-          lora_name: loraName,
-          strength_model: 0.8,
-          strength_clip: 0.8,
-        },
-        class_type: "LoraLoader",
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      // Update references to use LoRA
-      workflow["1"].inputs.clip = ["8", 1]
-      workflow["2"].inputs.clip = ["8", 1]
-      workflow["3"].inputs.model = ["8", 0]
-    }
+      const objectInfo = await response.json()
 
-    return workflow
+      const checkpoints = objectInfo.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0] || []
+      const loras = objectInfo.LoraLoader?.input?.required?.lora_name?.[0] || []
+      const vaes = objectInfo.VAELoader?.input?.required?.vae_name?.[0] || []
+
+      return { checkpoints, loras, vaes }
+    } catch (error) {
+      console.error("Failed to get available models:", error)
+      return { checkpoints: [], loras: [], vaes: [] }
+    }
   }
 
-  private async pollForCompletion(promptId: string): Promise<string> {
-    let attempts = 0
-    const maxAttempts = 60 // 5 minutes max
+  async generateImage(request: GenerationRequest): Promise<GenerationResult> {
+    const startTime = Date.now()
 
-    while (attempts < maxAttempts) {
-      await new Promise((resolve) => setTimeout(resolve, 5000)) // Wait 5 seconds
-
-      const historyResponse = await fetch(`${this.baseUrl}/history/${promptId}`)
-      const history = await historyResponse.json()
-
-      if (history[promptId]) {
-        const outputs = history[promptId].outputs
-        const imageInfo = outputs["7"].images[0]
-
-        const imageResponse = await fetch(
-          `${this.baseUrl}/view?filename=${imageInfo.filename}&subfolder=${imageInfo.subfolder}&type=${imageInfo.type}`,
+    try {
+      // Validate model exists
+      const availableModels = await this.getAvailableModels()
+      if (!availableModels.checkpoints.includes(request.model)) {
+        throw new Error(
+          `Model "${request.model}" not found. Available models: ${availableModels.checkpoints.join(", ")}`,
         )
-
-        const imageBuffer = await imageResponse.arrayBuffer()
-        return Buffer.from(imageBuffer).toString("base64")
       }
 
-      attempts++
+      // Create workflow based on model type
+      const workflow = createWorkflowForModel(request.model, request.prompt, {
+        negativePrompt: request.negativePrompt,
+        width: request.width,
+        height: request.height,
+        steps: request.steps,
+        cfg: request.cfg,
+        guidance: request.guidance,
+        seed: request.seed,
+        loraPath: request.loraPath,
+        loraStrength: request.loraStrength,
+      })
+
+      // Queue the workflow
+      const queueResponse = await fetch(`${this.config.url}/prompt`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt: workflow,
+          client_id: this.clientId,
+        }),
+      })
+
+      if (!queueResponse.ok) {
+        throw new Error(`Failed to queue workflow: ${queueResponse.statusText}`)
+      }
+
+      const queueResult = await queueResponse.json()
+      const promptId = queueResult.prompt_id
+
+      // Wait for completion and get result
+      const result = await this.waitForCompletion(promptId)
+
+      return {
+        ...result,
+        executionTime: Date.now() - startTime,
+        seed: request.seed,
+      }
+    } catch (error) {
+      console.error("Image generation failed:", error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+        executionTime: Date.now() - startTime,
+      }
+    }
+  }
+
+  private async waitForCompletion(promptId: string): Promise<GenerationResult> {
+    const maxWaitTime = this.config.timeout
+    const pollInterval = 1000
+    let elapsedTime = 0
+
+    while (elapsedTime < maxWaitTime) {
+      try {
+        // Check queue status
+        const queueResponse = await fetch(`${this.config.url}/queue`)
+        const queueData = await queueResponse.json()
+
+        // Check if our prompt is still in queue
+        const inQueue =
+          queueData.queue_running.some((item: any) => item[1] === promptId) ||
+          queueData.queue_pending.some((item: any) => item[1] === promptId)
+
+        if (!inQueue) {
+          // Prompt completed, get the result
+          const historyResponse = await fetch(`${this.config.url}/history/${promptId}`)
+          const historyData = await historyResponse.json()
+
+          if (historyData[promptId]) {
+            const outputs = historyData[promptId].outputs
+
+            // Find the SaveImage node output
+            for (const nodeId in outputs) {
+              const output = outputs[nodeId]
+              if (output.images && output.images.length > 0) {
+                const image = output.images[0]
+                const imageUrl = `${this.config.url}/view?filename=${image.filename}&subfolder=${image.subfolder}&type=${image.type}`
+
+                // Get image data
+                const imageResponse = await fetch(imageUrl)
+                const imageBuffer = await imageResponse.arrayBuffer()
+                const imageData = Buffer.from(imageBuffer).toString("base64")
+
+                return {
+                  success: true,
+                  imageUrl,
+                  imageData,
+                }
+              }
+            }
+          }
+
+          throw new Error("No image output found in completed workflow")
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, pollInterval))
+        elapsedTime += pollInterval
+      } catch (error) {
+        console.error("Error while waiting for completion:", error)
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Error while waiting for completion",
+        }
+      }
     }
 
-    throw new Error("ComfyUI generation timed out")
+    return {
+      success: false,
+      error: `Generation timed out after ${maxWaitTime}ms`,
+    }
+  }
+
+  async interruptGeneration(): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.config.url}/interrupt`, {
+        method: "POST",
+      })
+      return response.ok
+    } catch (error) {
+      console.error("Failed to interrupt generation:", error)
+      return false
+    }
+  }
+
+  async getQueueStatus(): Promise<{ running: number; pending: number }> {
+    try {
+      const response = await fetch(`${this.config.url}/queue`)
+      const data = await response.json()
+
+      return {
+        running: data.queue_running.length,
+        pending: data.queue_pending.length,
+      }
+    } catch (error) {
+      console.error("Failed to get queue status:", error)
+      return { running: 0, pending: 0 }
+    }
+  }
+
+  async getSystemStats(): Promise<any> {
+    try {
+      const response = await fetch(`${this.config.url}/system_stats`)
+      return await response.json()
+    } catch (error) {
+      console.error("Failed to get system stats:", error)
+      return null
+    }
   }
 }
 
-export const comfyUI = new ComfyUIClient()
+// Default client instance
+export const comfyUIClient = new ComfyUIClient({
+  url: process.env.COMFYUI_URL || "http://localhost:8188",
+  timeout: 300000, // 5 minutes
+})
+
+// Helper function for easy image generation
+export async function generateImageWithComfyUI(
+  prompt: string,
+  model: string,
+  options: Partial<GenerationRequest> = {},
+): Promise<GenerationResult> {
+  return await comfyUIClient.generateImage({
+    prompt,
+    model,
+    ...options,
+  })
+}
+
+// Helper function to check if ComfyUI is available
+export async function isComfyUIAvailable(): Promise<boolean> {
+  return await comfyUIClient.checkConnection()
+}

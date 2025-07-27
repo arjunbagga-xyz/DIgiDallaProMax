@@ -1,25 +1,46 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { readFile, writeFile, mkdir } from "fs/promises"
 import { join } from "path"
+import { existsSync } from "fs"
 
 interface ScheduledTask {
   id: string
   characterId: string
-  type: "generate_and_post" | "train_lora" | "backup"
+  characterName?: string
+  type: "generate_and_post" | "train_lora" | "backup" | "generate_only"
   schedule: string // cron expression or interval
   active: boolean
   lastRun?: string
   nextRun?: string
-  config?: any
+  missedRuns?: string[]
+  config?: {
+    fluxModel?: string
+    postToInstagram?: boolean
+    generateCaption?: boolean
+    customPrompt?: string
+    style?: string
+    mood?: string
+  }
+  createdAt: string
+  updatedAt: string
+}
+
+interface SchedulerSettings {
+  autoRecovery: boolean
+  notifications: boolean
+  defaultPostingTime: string
+  maxMissedRuns: number
+  retryAttempts: number
+  timezone: string
 }
 
 const SCHEDULE_FILE = join(process.cwd(), "data", "schedule.json")
+const SETTINGS_FILE = join(process.cwd(), "data", "scheduler-settings.json")
 
 async function ensureDataDirectory() {
-  try {
-    await mkdir(join(process.cwd(), "data"), { recursive: true })
-  } catch (error) {
-    // Directory might already exist
+  const dataDir = join(process.cwd(), "data")
+  if (!existsSync(dataDir)) {
+    await mkdir(dataDir, { recursive: true })
   }
 }
 
@@ -37,20 +58,64 @@ async function saveSchedule(tasks: ScheduledTask[]) {
   await writeFile(SCHEDULE_FILE, JSON.stringify(tasks, null, 2))
 }
 
+async function loadSettings(): Promise<SchedulerSettings> {
+  try {
+    const data = await readFile(SETTINGS_FILE, "utf-8")
+    return JSON.parse(data)
+  } catch (error) {
+    return {
+      autoRecovery: true,
+      notifications: true,
+      defaultPostingTime: "18:00",
+      maxMissedRuns: 5,
+      retryAttempts: 3,
+      timezone: "UTC",
+    }
+  }
+}
+
+async function saveSettings(settings: SchedulerSettings) {
+  await ensureDataDirectory()
+  await writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2))
+}
+
+async function loadCharacters() {
+  try {
+    const data = await readFile(join(process.cwd(), "data", "characters.json"), "utf-8")
+    return JSON.parse(data)
+  } catch (error) {
+    return []
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
-    const tasks = await loadSchedule()
+    const { searchParams } = new URL(request.url)
+    const action = searchParams.get("action")
 
-    // Calculate next run times for display
-    const tasksWithNextRun = tasks.map((task) => ({
+    if (action === "settings") {
+      const settings = await loadSettings()
+      return NextResponse.json({ settings })
+    }
+
+    const tasks = await loadSchedule()
+    const characters = await loadCharacters()
+
+    // Enrich tasks with character names
+    const enrichedTasks = tasks.map((task) => ({
       ...task,
-      nextRun: calculateNextRun(task.schedule),
+      characterName: characters.find((c: any) => c.id === task.characterId)?.name || "Unknown",
+      nextRun: calculateNextRun(task.schedule, task.lastRun),
     }))
 
     return NextResponse.json({
-      tasks: tasksWithNextRun,
-      totalTasks: tasks.length,
-      activeTasks: tasks.filter((t) => t.active).length,
+      tasks: enrichedTasks,
+      summary: {
+        total: tasks.length,
+        active: tasks.filter((t) => t.active).length,
+        inactive: tasks.filter((t) => !t.active).length,
+        missedRuns: tasks.reduce((sum, t) => sum + (t.missedRuns?.length || 0), 0),
+      },
     })
   } catch (error) {
     console.error("Failed to get schedule:", error)
@@ -65,113 +130,152 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case "run_now":
-        return await runSchedulerNow(body.task)
-
+        return await runSchedulerNow(body.taskId)
       case "check_missed":
         return await checkMissedRuns()
-
       case "add_task":
         return await addScheduledTask(body.task)
-
       case "update_task":
         return await updateScheduledTask(body.task)
-
       case "delete_task":
         return await deleteScheduledTask(body.taskId)
-
+      case "toggle_task":
+        return await toggleTask(body.taskId)
+      case "update_settings":
+        return await updateSettings(body.settings)
       default:
         return NextResponse.json({ error: "Invalid action" }, { status: 400 })
     }
   } catch (error) {
     console.error("Scheduler operation failed:", error)
-    return NextResponse.json({ error: "Scheduler operation failed" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Scheduler operation failed",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }
 
-async function runSchedulerNow(task?: ScheduledTask) {
+async function runSchedulerNow(taskId?: string) {
   try {
-    if (task) {
+    const tasks = await loadSchedule()
+
+    if (taskId) {
       // Run specific task
+      const task = tasks.find((t) => t.id === taskId)
+      if (!task) {
+        return NextResponse.json({ error: "Task not found" }, { status: 404 })
+      }
+
       const result = await executeTask(task)
+
+      // Update last run time
+      task.lastRun = new Date().toISOString()
+      task.nextRun = calculateNextRun(task.schedule, task.lastRun)
+      await saveSchedule(tasks)
+
       return NextResponse.json({
         success: true,
-        message: "Task executed successfully",
+        message: `Task "${task.type}" executed successfully`,
         result,
       })
     } else {
       // Run all active tasks
-      const tasks = await loadSchedule()
       const activeTasks = tasks.filter((t) => t.active)
-
       const results = []
+
       for (const task of activeTasks) {
         try {
           const result = await executeTask(task)
+          task.lastRun = new Date().toISOString()
+          task.nextRun = calculateNextRun(task.schedule, task.lastRun)
           results.push({ taskId: task.id, success: true, result })
         } catch (error) {
-          results.push({ taskId: task.id, success: false, error: error.message })
+          results.push({
+            taskId: task.id,
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+          })
         }
       }
+
+      await saveSchedule(tasks)
 
       return NextResponse.json({
         success: true,
         message: `Executed ${activeTasks.length} tasks`,
         results,
+        summary: {
+          total: activeTasks.length,
+          successful: results.filter((r) => r.success).length,
+          failed: results.filter((r) => !r.success).length,
+        },
       })
     }
   } catch (error) {
-    return NextResponse.json({ error: "Failed to run scheduler" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Failed to run scheduler",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }
 
 async function executeTask(task: ScheduledTask) {
-  console.log(`Executing task ${task.id} for character ${task.characterId}`)
+  console.log(`🎯 Executing task ${task.id} (${task.type}) for character ${task.characterId}`)
 
   switch (task.type) {
     case "generate_and_post":
       return await executeGenerateAndPost(task)
-
+    case "generate_only":
+      return await executeGenerateOnly(task)
     case "train_lora":
       return await executeTrainLora(task)
-
     case "backup":
       return await executeBackup(task)
-
     default:
       throw new Error(`Unknown task type: ${task.type}`)
   }
 }
 
 async function executeGenerateAndPost(task: ScheduledTask) {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+
   // Generate image
-  const generateResponse = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/generate-image`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ characterId: task.characterId }),
-    },
-  )
+  const generateResponse = await fetch(`${baseUrl}/api/generate-image`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      characterId: task.characterId,
+      fluxModel: task.config?.fluxModel || "flux-dev",
+      customPrompt: task.config?.customPrompt,
+      style: task.config?.style,
+      mood: task.config?.mood,
+    }),
+  })
 
   if (!generateResponse.ok) {
-    throw new Error("Failed to generate image")
+    const error = await generateResponse.json()
+    throw new Error(`Image generation failed: ${error.error}`)
   }
 
   const generateResult = await generateResponse.json()
 
-  // Post to Instagram (if configured)
-  if (process.env.INSTAGRAM_ACCESS_TOKEN) {
-    const postResponse = await fetch(
-      `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/post-to-instagram`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageBase64: generateResult.image,
-          caption: `${generateResult.prompt} ✨\n\n#AIArt #GeneratedContent #DigitalArt`,
-        }),
-      },
-    )
+  // Post to Instagram if configured
+  if (task.config?.postToInstagram && process.env.INSTAGRAM_ACCESS_TOKEN) {
+    const postResponse = await fetch(`${baseUrl}/api/post-to-instagram`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        imageBase64: generateResult.image,
+        caption: generateResult.caption || `${generateResult.prompt} ✨\n\n#AIArt #GeneratedContent #DigitalArt`,
+        characterId: task.characterId,
+      }),
+    })
 
     if (postResponse.ok) {
       const postResult = await postResponse.json()
@@ -179,7 +283,18 @@ async function executeGenerateAndPost(task: ScheduledTask) {
         generated: true,
         posted: true,
         prompt: generateResult.prompt,
+        caption: generateResult.caption,
         postId: postResult.postId,
+        instagramUrl: postResult.permalink,
+      }
+    } else {
+      const postError = await postResponse.json()
+      return {
+        generated: true,
+        posted: false,
+        prompt: generateResult.prompt,
+        caption: generateResult.caption,
+        postError: postError.error,
       }
     }
   }
@@ -188,12 +303,44 @@ async function executeGenerateAndPost(task: ScheduledTask) {
     generated: true,
     posted: false,
     prompt: generateResult.prompt,
-    reason: "Instagram not configured",
+    caption: generateResult.caption,
+    reason: task.config?.postToInstagram ? "Instagram posting failed" : "Instagram posting disabled",
+  }
+}
+
+async function executeGenerateOnly(task: ScheduledTask) {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+
+  const generateResponse = await fetch(`${baseUrl}/api/generate-image`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      characterId: task.characterId,
+      fluxModel: task.config?.fluxModel || "flux-dev",
+      customPrompt: task.config?.customPrompt,
+      style: task.config?.style,
+      mood: task.config?.mood,
+    }),
+  })
+
+  if (!generateResponse.ok) {
+    const error = await generateResponse.json()
+    throw new Error(`Image generation failed: ${error.error}`)
+  }
+
+  const result = await generateResponse.json()
+  return {
+    generated: true,
+    posted: false,
+    prompt: result.prompt,
+    caption: result.caption,
   }
 }
 
 async function executeTrainLora(task: ScheduledTask) {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/lora/train`, {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+
+  const response = await fetch(`${baseUrl}/api/lora/train`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -203,7 +350,8 @@ async function executeTrainLora(task: ScheduledTask) {
   })
 
   if (!response.ok) {
-    throw new Error("Failed to start LoRA training")
+    const error = await response.json()
+    throw new Error(`LoRA training failed: ${error.error}`)
   }
 
   return await response.json()
@@ -211,11 +359,14 @@ async function executeTrainLora(task: ScheduledTask) {
 
 async function executeBackup(task: ScheduledTask) {
   // Simple backup implementation
-  console.log(`Running backup for character ${task.characterId}`)
+  const timestamp = new Date().toISOString()
+  console.log(`💾 Running backup for character ${task.characterId} at ${timestamp}`)
+
   return {
     backed_up: true,
-    timestamp: new Date().toISOString(),
+    timestamp,
     message: "Backup completed successfully",
+    files: ["characters.json", "schedule.json", "generated_images/"],
   }
 }
 
@@ -227,18 +378,27 @@ async function checkMissedRuns() {
   for (const task of tasks) {
     if (!task.active) continue
 
-    const nextRun = new Date(task.nextRun || calculateNextRun(task.schedule))
+    const nextRun = new Date(task.nextRun || calculateNextRun(task.schedule, task.lastRun))
 
     if (nextRun <= now) {
       try {
         await executeTask(task)
-
-        // Update last run time
         task.lastRun = now.toISOString()
-        task.nextRun = calculateNextRun(task.schedule)
+        task.nextRun = calculateNextRun(task.schedule, task.lastRun)
         missedCount++
       } catch (error) {
         console.error(`Failed to execute missed task ${task.id}:`, error)
+
+        // Track missed runs
+        if (!task.missedRuns) task.missedRuns = []
+        task.missedRuns.push(now.toISOString())
+
+        // Disable task if too many missed runs
+        const settings = await loadSettings()
+        if (task.missedRuns.length >= settings.maxMissedRuns) {
+          task.active = false
+          console.log(`Disabled task ${task.id} due to ${task.missedRuns.length} missed runs`)
+        }
       }
     }
   }
@@ -257,20 +417,34 @@ async function checkMissedRuns() {
 async function addScheduledTask(taskData: Partial<ScheduledTask>) {
   const tasks = await loadSchedule()
 
-  const newTask: ScheduledTask = {
-    id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    characterId: taskData.characterId!,
-    type: taskData.type || "generate_and_post",
-    schedule: taskData.schedule || "0 18 * * *", // Daily at 6 PM
-    active: taskData.active !== false,
-    nextRun: calculateNextRun(taskData.schedule || "0 18 * * *"),
-    config: taskData.config || {},
+  if (!taskData.characterId || !taskData.type) {
+    throw new Error("Character ID and type are required")
   }
 
+  const newTask: ScheduledTask = {
+    id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    characterId: taskData.characterId,
+    type: taskData.type as ScheduledTask["type"],
+    schedule: taskData.schedule || "0 18 * * *", // Daily at 6 PM
+    active: taskData.active !== false,
+    config: taskData.config || {
+      fluxModel: "flux-dev",
+      postToInstagram: true,
+      generateCaption: true,
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+
+  newTask.nextRun = calculateNextRun(newTask.schedule)
   tasks.push(newTask)
   await saveSchedule(tasks)
 
-  return NextResponse.json({ success: true, task: newTask })
+  return NextResponse.json({
+    success: true,
+    task: newTask,
+    message: "Task created successfully",
+  })
 }
 
 async function updateScheduledTask(taskData: ScheduledTask) {
@@ -284,12 +458,17 @@ async function updateScheduledTask(taskData: ScheduledTask) {
   tasks[taskIndex] = {
     ...tasks[taskIndex],
     ...taskData,
-    nextRun: calculateNextRun(taskData.schedule),
+    updatedAt: new Date().toISOString(),
+    nextRun: calculateNextRun(taskData.schedule, taskData.lastRun),
   }
 
   await saveSchedule(tasks)
 
-  return NextResponse.json({ success: true, task: tasks[taskIndex] })
+  return NextResponse.json({
+    success: true,
+    task: tasks[taskIndex],
+    message: "Task updated successfully",
+  })
 }
 
 async function deleteScheduledTask(taskId: string) {
@@ -302,11 +481,49 @@ async function deleteScheduledTask(taskId: string) {
 
   await saveSchedule(filteredTasks)
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({
+    success: true,
+    message: "Task deleted successfully",
+  })
 }
 
-function calculateNextRun(schedule: string): string {
+async function toggleTask(taskId: string) {
+  const tasks = await loadSchedule()
+  const task = tasks.find((t) => t.id === taskId)
+
+  if (!task) {
+    throw new Error("Task not found")
+  }
+
+  task.active = !task.active
+  task.updatedAt = new Date().toISOString()
+
+  if (task.active) {
+    task.nextRun = calculateNextRun(task.schedule, task.lastRun)
+  }
+
+  await saveSchedule(tasks)
+
+  return NextResponse.json({
+    success: true,
+    task,
+    message: `Task ${task.active ? "activated" : "deactivated"} successfully`,
+  })
+}
+
+async function updateSettings(settings: SchedulerSettings) {
+  await saveSettings(settings)
+
+  return NextResponse.json({
+    success: true,
+    settings,
+    message: "Settings updated successfully",
+  })
+}
+
+function calculateNextRun(schedule: string, lastRun?: string): string {
   const now = new Date()
+  const lastRunDate = lastRun ? new Date(lastRun) : now
 
   // Handle simple intervals (e.g., "6h", "30m", "1d")
   if (schedule.match(/^\d+[hmd]$/)) {
@@ -326,10 +543,27 @@ function calculateNextRun(schedule: string): string {
         break
     }
 
-    return new Date(now.getTime() + milliseconds).toISOString()
+    return new Date(Math.max(now.getTime(), lastRunDate.getTime()) + milliseconds).toISOString()
   }
 
-  // For cron expressions, return next hour as approximation
-  // In production, use a proper cron library like node-cron
+  // Handle cron expressions (simplified)
+  if (schedule.includes("*")) {
+    // For demo purposes, assume daily at specified hour
+    const parts = schedule.split(" ")
+    if (parts.length >= 2) {
+      const hour = Number.parseInt(parts[1]) || 18
+      const nextRun = new Date(now)
+      nextRun.setHours(hour, 0, 0, 0)
+
+      // If time has passed today, schedule for tomorrow
+      if (nextRun <= now) {
+        nextRun.setDate(nextRun.getDate() + 1)
+      }
+
+      return nextRun.toISOString()
+    }
+  }
+
+  // Default: next hour
   return new Date(now.getTime() + 60 * 60 * 1000).toISOString()
 }

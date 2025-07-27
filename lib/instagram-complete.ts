@@ -1,142 +1,303 @@
-// Complete Instagram integration with proper image hosting
-import { writeFile, mkdir } from "fs/promises"
-import { join } from "path"
+// Complete Instagram API integration
+export interface InstagramCredentials {
+  accessToken: string
+  accountId: string
+}
 
-export interface InstagramPostOptions {
-  imageBase64: string
+export interface InstagramPost {
+  id: string
+  permalink: string
+  mediaUrl: string
+  caption: string
+  timestamp: string
+  mediaType: "IMAGE" | "VIDEO" | "CAROUSEL_ALBUM"
+}
+
+export interface InstagramPostRequest {
+  imageUrl?: string
+  imageData?: string
   caption: string
   accessToken: string
   accountId: string
 }
 
-export class InstagramClient {
+export interface InstagramPostResponse {
+  success: boolean
+  postId?: string
+  permalink?: string
+  error?: string
+}
+
+class InstagramClient {
   private baseUrl = "https://graph.facebook.com/v18.0"
 
-  async postImage(options: InstagramPostOptions): Promise<{ success: boolean; postId?: string; error?: string }> {
+  async postImage(request: InstagramPostRequest): Promise<InstagramPostResponse> {
     try {
-      // Step 1: Upload image to temporary hosting
-      const imageUrl = await this.uploadImageToHosting(options.imageBase64)
+      // Step 1: Upload image to Instagram
+      let mediaId: string
 
-      // Step 2: Create media container
-      const containerId = await this.createMediaContainer(
-        imageUrl,
-        options.caption,
-        options.accessToken,
-        options.accountId,
-      )
+      if (request.imageData) {
+        // Upload from base64 data
+        mediaId = await this.uploadImageFromData(request.imageData, request.accessToken, request.accountId)
+      } else if (request.imageUrl) {
+        // Upload from URL
+        mediaId = await this.uploadImageFromUrl(request.imageUrl, request.accessToken, request.accountId)
+      } else {
+        throw new Error("Either imageUrl or imageData must be provided")
+      }
 
-      // Step 3: Publish the media
-      const postId = await this.publishMedia(containerId, options.accessToken, options.accountId)
+      // Step 2: Publish the media
+      const publishResponse = await this.publishMedia(mediaId, request.caption, request.accessToken, request.accountId)
 
-      return { success: true, postId }
+      return {
+        success: true,
+        postId: publishResponse.id,
+        permalink: await this.getPostPermalink(publishResponse.id, request.accessToken),
+      }
     } catch (error) {
-      console.error("Instagram posting failed:", error)
-      return { success: false, error: error.message }
+      console.error("Instagram post failed:", error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+      }
     }
   }
 
-  private async uploadImageToHosting(imageBase64: string): Promise<string> {
-    // Option 1: Save to public directory (for local development)
-    if (process.env.NODE_ENV === "development") {
-      const filename = `instagram-${Date.now()}.png`
-      const publicPath = join(process.cwd(), "public", "temp", filename)
-
-      await mkdir(join(process.cwd(), "public", "temp"), { recursive: true })
-      await writeFile(publicPath, Buffer.from(imageBase64, "base64"))
-
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
-      return `${baseUrl}/temp/${filename}`
-    }
-
-    // Option 2: Upload to Vercel Blob (production)
-    if (process.env.BLOB_READ_WRITE_TOKEN) {
-      const { put } = await import("@vercel/blob")
-      const filename = `instagram-${Date.now()}.png`
-      const blob = await put(filename, Buffer.from(imageBase64, "base64"), {
-        access: "public",
-      })
-      return blob.url
-    }
-
-    // Option 3: Upload to Cloudinary (alternative)
-    if (process.env.CLOUDINARY_URL) {
-      const cloudinary = require("cloudinary").v2
-      const result = await cloudinary.uploader.upload(`data:image/png;base64,${imageBase64}`, {
-        folder: "instagram-bot",
-        public_id: `post-${Date.now()}`,
-      })
-      return result.secure_url
-    }
-
-    throw new Error(
-      "No image hosting service configured. Please set up Vercel Blob, Cloudinary, or use development mode.",
-    )
+  private async uploadImageFromData(imageData: string, accessToken: string, accountId: string): Promise<string> {
+    // First, we need to upload the image to a temporary hosting service
+    // For this example, we'll use Vercel Blob or Cloudinary
+    const imageUrl = await this.uploadToImageHost(imageData)
+    return await this.uploadImageFromUrl(imageUrl, accessToken, accountId)
   }
 
-  private async createMediaContainer(
-    imageUrl: string,
+  private async uploadImageFromUrl(imageUrl: string, accessToken: string, accountId: string): Promise<string> {
+    const uploadUrl = `${this.baseUrl}/${accountId}/media`
+
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        image_url: imageUrl,
+        access_token: accessToken,
+      }),
+    })
+
+    if (!uploadResponse.ok) {
+      const errorData = await uploadResponse.json()
+      throw new Error(`Image upload failed: ${errorData.error?.message || uploadResponse.statusText}`)
+    }
+
+    const uploadData = await uploadResponse.json()
+    return uploadData.id
+  }
+
+  private async publishMedia(
+    mediaId: string,
     caption: string,
     accessToken: string,
     accountId: string,
-  ): Promise<string> {
-    const response = await fetch(`${this.baseUrl}/${accountId}/media`, {
+  ): Promise<{ id: string }> {
+    const publishUrl = `${this.baseUrl}/${accountId}/media_publish`
+
+    const publishResponse = await fetch(publishUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
-        image_url: imageUrl,
+        creation_id: mediaId,
         caption: caption,
         access_token: accessToken,
       }),
     })
 
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(`Container creation failed: ${error.error?.message || response.statusText}`)
+    if (!publishResponse.ok) {
+      const errorData = await publishResponse.json()
+      throw new Error(`Media publish failed: ${errorData.error?.message || publishResponse.statusText}`)
     }
 
-    const result = await response.json()
-    return result.id
+    return await publishResponse.json()
   }
 
-  private async publishMedia(containerId: string, accessToken: string, accountId: string): Promise<string> {
-    const response = await fetch(`${this.baseUrl}/${accountId}/media_publish`, {
+  private async getPostPermalink(postId: string, accessToken: string): Promise<string> {
+    try {
+      const response = await fetch(`${this.baseUrl}/${postId}?fields=permalink&access_token=${accessToken}`)
+
+      if (!response.ok) {
+        console.warn("Failed to get permalink, using fallback")
+        return `https://www.instagram.com/p/${postId}/`
+      }
+
+      const data = await response.json()
+      return data.permalink || `https://www.instagram.com/p/${postId}/`
+    } catch (error) {
+      console.warn("Failed to get permalink:", error)
+      return `https://www.instagram.com/p/${postId}/`
+    }
+  }
+
+  private async uploadToImageHost(imageData: string): Promise<string> {
+    // Try Vercel Blob first
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      return await this.uploadToVercelBlob(imageData)
+    }
+
+    // Try Cloudinary as fallback
+    if (process.env.CLOUDINARY_URL) {
+      return await this.uploadToCloudinary(imageData)
+    }
+
+    throw new Error("No image hosting service configured. Please set BLOB_READ_WRITE_TOKEN or CLOUDINARY_URL")
+  }
+
+  private async uploadToVercelBlob(imageData: string): Promise<string> {
+    const { put } = await import("@vercel/blob")
+
+    const buffer = Buffer.from(imageData, "base64")
+    const filename = `generated-${Date.now()}.png`
+
+    const blob = await put(filename, buffer, {
+      access: "public",
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+    })
+
+    return blob.url
+  }
+
+  private async uploadToCloudinary(imageData: string): Promise<string> {
+    const cloudinaryUrl = process.env.CLOUDINARY_URL
+    if (!cloudinaryUrl) {
+      throw new Error("CLOUDINARY_URL not configured")
+    }
+
+    const url = new URL(cloudinaryUrl)
+    const cloudName = url.hostname
+    const apiKey = url.username
+    const apiSecret = url.password
+
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`
+
+    const formData = new FormData()
+    formData.append("file", `data:image/png;base64,${imageData}`)
+    formData.append("api_key", apiKey)
+    formData.append("timestamp", Math.floor(Date.now() / 1000).toString())
+
+    // Generate signature (simplified - in production, use proper crypto)
+    const signature = this.generateCloudinarySignature(apiSecret, Math.floor(Date.now() / 1000))
+    formData.append("signature", signature)
+
+    const response = await fetch(uploadUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        creation_id: containerId,
-        access_token: accessToken,
-      }),
+      body: formData,
     })
 
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(`Publishing failed: ${error.error?.message || response.statusText}`)
+      throw new Error(`Cloudinary upload failed: ${response.statusText}`)
     }
 
-    const result = await response.json()
-    return result.id
+    const data = await response.json()
+    return data.secure_url
   }
 
-  async getAccountInfo(accessToken: string, accountId: string): Promise<any> {
-    const response = await fetch(
-      `${this.baseUrl}/${accountId}?fields=id,username,account_type&access_token=${accessToken}`,
-    )
+  private generateCloudinarySignature(apiSecret: string, timestamp: number): string {
+    // Simplified signature generation - use proper crypto in production
+    const crypto = require("crypto")
+    const params = `timestamp=${timestamp}`
+    return crypto
+      .createHash("sha1")
+      .update(params + apiSecret)
+      .digest("hex")
+  }
 
-    if (!response.ok) {
-      throw new Error(`Failed to get account info: ${response.statusText}`)
+  async getUserInfo(accessToken: string, accountId: string): Promise<any> {
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/${accountId}?fields=id,username,account_type,media_count&access_token=${accessToken}`,
+      )
+
+      if (!response.ok) {
+        throw new Error(`Failed to get user info: ${response.statusText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error("Failed to get Instagram user info:", error)
+      return null
     }
-
-    return response.json()
   }
 
-  async validateToken(accessToken: string): Promise<boolean> {
+  async getRecentPosts(accessToken: string, accountId: string, limit = 10): Promise<InstagramPost[]> {
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/${accountId}/media?fields=id,permalink,media_url,caption,timestamp,media_type&limit=${limit}&access_token=${accessToken}`,
+      )
+
+      if (!response.ok) {
+        throw new Error(`Failed to get recent posts: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      return data.data || []
+    } catch (error) {
+      console.error("Failed to get recent Instagram posts:", error)
+      return []
+    }
+  }
+
+  async validateAccessToken(accessToken: string): Promise<boolean> {
     try {
       const response = await fetch(`${this.baseUrl}/me?access_token=${accessToken}`)
       return response.ok
     } catch (error) {
+      console.error("Failed to validate Instagram access token:", error)
       return false
+    }
+  }
+
+  async getAccountInsights(accessToken: string, accountId: string): Promise<any> {
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/${accountId}/insights?metric=impressions,reach,profile_views&period=day&access_token=${accessToken}`,
+      )
+
+      if (!response.ok) {
+        throw new Error(`Failed to get insights: ${response.statusText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error("Failed to get Instagram insights:", error)
+      return null
     }
   }
 }
 
-export const instagram = new InstagramClient()
+// Export singleton instance
+export const instagramClient = new InstagramClient()
+
+// Helper functions
+export async function postToInstagram(request: InstagramPostRequest): Promise<InstagramPostResponse> {
+  return await instagramClient.postImage(request)
+}
+
+export async function validateInstagramCredentials(accessToken: string, accountId: string): Promise<boolean> {
+  const isValid = await instagramClient.validateAccessToken(accessToken)
+  if (!isValid) return false
+
+  const userInfo = await instagramClient.getUserInfo(accessToken, accountId)
+  return userInfo !== null
+}
+
+export async function getInstagramUserInfo(accessToken: string, accountId: string): Promise<any> {
+  return await instagramClient.getUserInfo(accessToken, accountId)
+}
+
+export async function getRecentInstagramPosts(
+  accessToken: string,
+  accountId: string,
+  limit = 10,
+): Promise<InstagramPost[]> {
+  return await instagramClient.getRecentPosts(accessToken, accountId, limit)
+}

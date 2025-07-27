@@ -1,198 +1,202 @@
+#!/usr/bin/env node
+
+/**
+ * ComfyUI Connection Test Script
+ * Tests ComfyUI server connection and basic functionality
+ */
+
 const fetch = require("node-fetch")
-const AbortSignal = require("abort-controller").AbortSignal
+const fs = require("fs").promises
 
-async function testComfyUI() {
-  const comfyuiUrl = process.env.COMFYUI_URL || "http://localhost:8188"
+const CONFIG = {
+  comfyuiUrl: process.env.COMFYUI_URL || "http://localhost:8188",
+  timeout: 30000,
+  testPrompt: "beautiful landscape, high quality, detailed, professional photography",
+  testModel: "flux1-dev.safetensors",
+}
 
-  console.log("🧪 Testing ComfyUI Connection...")
-  console.log(`📡 ComfyUI URL: ${comfyuiUrl}`)
+const logger = {
+  info: (msg) => console.log(`[INFO] ${new Date().toISOString()} - ${msg}`),
+  warn: (msg) => console.warn(`[WARN] ${new Date().toISOString()} - ${msg}`),
+  error: (msg) => console.error(`[ERROR] ${new Date().toISOString()} - ${msg}`),
+  success: (msg) => console.log(`[SUCCESS] ${new Date().toISOString()} - ${msg}`),
+}
 
-  let checkpoints = []
-  let loras = []
-  let fluxModels = []
+async function testConnection() {
+  logger.info(`Testing connection to ComfyUI at ${CONFIG.comfyuiUrl}...`)
 
   try {
-    // Test 1: Basic connection
-    console.log("\n1️⃣ Testing basic connection...")
-    const response = await fetch(`${comfyuiUrl}/system_stats`, {
-      signal: AbortSignal.timeout(5000),
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+
+    const response = await fetch(`${CONFIG.comfyuiUrl}/system_stats`, {
+      signal: controller.signal,
     })
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-    }
+    clearTimeout(timeoutId)
 
-    const stats = await response.json()
-    console.log("✅ ComfyUI is online!")
-    console.log(`   System: ${stats.system?.os || "Unknown"}`)
-    console.log(`   Python: ${stats.system?.python_version || "Unknown"}`)
-    console.log(`   ComfyUI: ${stats.system?.comfyui_version || "Unknown"}`)
-
-    // Test 2: Check available models
-    console.log("\n2️⃣ Checking available models...")
-    const objectInfoResponse = await fetch(`${comfyuiUrl}/object_info`)
-
-    if (objectInfoResponse.ok) {
-      const objectInfo = await objectInfoResponse.json()
-
-      // Check for checkpoint models
-      checkpoints = objectInfo.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0] || []
-      console.log(`✅ Found ${checkpoints.length} checkpoint models:`)
-      checkpoints.slice(0, 5).forEach((model) => console.log(`   - ${model}`))
-      if (checkpoints.length > 5) {
-        console.log(`   ... and ${checkpoints.length - 5} more`)
-      }
-
-      // Check for LoRA models
-      loras = objectInfo.LoraLoader?.input?.required?.lora_name?.[0] || []
-      console.log(`✅ Found ${loras.length} LoRA models:`)
-      loras.slice(0, 5).forEach((lora) => console.log(`   - ${lora}`))
-      if (loras.length > 5) {
-        console.log(`   ... and ${loras.length - 5} more`)
-      }
-
-      // Check for Flux models specifically
-      fluxModels = checkpoints.filter((model) => model.toLowerCase().includes("flux"))
-
-      if (fluxModels.length > 0) {
-        console.log(`🎯 Found ${fluxModels.length} Flux models:`)
-        fluxModels.forEach((model) => console.log(`   ⚡ ${model}`))
-      } else {
-        console.log("⚠️  No Flux models found. You may need to download them.")
-        console.log("   Recommended: flux1-dev.safetensors or flux1-schnell.safetensors")
-      }
-    }
-
-    // Test 3: Queue status
-    console.log("\n3️⃣ Checking queue status...")
-    const queueResponse = await fetch(`${comfyuiUrl}/queue`)
-
-    if (queueResponse.ok) {
-      const queueData = await queueResponse.json()
-      console.log(`✅ Queue status:`)
-      console.log(`   Running: ${queueData.queue_running?.length || 0} jobs`)
-      console.log(`   Pending: ${queueData.queue_pending?.length || 0} jobs`)
-    }
-
-    // Test 4: Simple generation test
-    console.log("\n4️⃣ Testing simple generation...")
-
-    if (checkpoints.length === 0) {
-      console.log("⚠️  Skipping generation test - no models available")
+    if (response.ok) {
+      const stats = await response.json()
+      logger.success("ComfyUI connection successful")
+      logger.info(`System stats: ${JSON.stringify(stats, null, 2)}`)
+      return true
     } else {
-      const testModel = fluxModels[0] || checkpoints[0]
-      console.log(`🎨 Using model: ${testModel}`)
-
-      const workflow = {
-        1: {
-          inputs: {
-            ckpt_name: testModel,
-          },
-          class_type: "CheckpointLoaderSimple",
-        },
-        2: {
-          inputs: {
-            text: "a beautiful landscape, high quality",
-            clip: ["1", 1],
-          },
-          class_type: "CLIPTextEncode",
-        },
-        3: {
-          inputs: {
-            text: "blurry, low quality",
-            clip: ["1", 1],
-          },
-          class_type: "CLIPTextEncode",
-        },
-        4: {
-          inputs: {
-            width: 512,
-            height: 512,
-            batch_size: 1,
-          },
-          class_type: "EmptyLatentImage",
-        },
-        5: {
-          inputs: {
-            seed: Math.floor(Math.random() * 1000000),
-            steps: 4,
-            cfg: 7.5,
-            sampler_name: "euler",
-            scheduler: "normal",
-            denoise: 1.0,
-            model: ["1", 0],
-            positive: ["2", 0],
-            negative: ["3", 0],
-            latent_image: ["4", 0],
-          },
-          class_type: "KSampler",
-        },
-        6: {
-          inputs: {
-            samples: ["5", 0],
-            vae: ["1", 2],
-          },
-          class_type: "VAEDecode",
-        },
-        7: {
-          inputs: {
-            filename_prefix: "test_generation",
-            images: ["6", 0],
-          },
-          class_type: "SaveImage",
-        },
-      }
-
-      const generateResponse = await fetch(`${comfyuiUrl}/prompt`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: workflow }),
-      })
-
-      if (generateResponse.ok) {
-        const result = await generateResponse.json()
-        console.log(`✅ Generation queued successfully!`)
-        console.log(`   Prompt ID: ${result.prompt_id}`)
-        console.log(`   Note: Check ComfyUI interface to see the generation progress`)
-      } else {
-        const error = await generateResponse.text()
-        console.log(`❌ Generation failed: ${error}`)
-      }
-    }
-
-    console.log("\n🎉 ComfyUI test completed successfully!")
-    console.log("\n📋 Summary:")
-    console.log(`   ✅ ComfyUI is running and accessible`)
-    console.log(`   ✅ ${checkpoints.length} models available`)
-    console.log(`   ✅ ${loras.length} LoRA models available`)
-    console.log(`   ✅ Queue system operational`)
-
-    if (fluxModels.length > 0) {
-      console.log(`   ✅ Flux models ready for use`)
-    } else {
-      console.log(`   ⚠️  Consider downloading Flux models for best results`)
+      logger.error(`HTTP ${response.status}: ${response.statusText}`)
+      return false
     }
   } catch (error) {
-    console.error("\n❌ ComfyUI test failed!")
-    console.error(`   Error: ${error.message}`)
-
-    if (error.code === "ECONNREFUSED") {
-      console.error("\n🔧 Troubleshooting:")
-      console.error("   1. Make sure ComfyUI is running:")
-      console.error("      cd ComfyUI")
-      console.error("      python main.py --listen")
-      console.error("   2. Check if the URL is correct in your .env file")
-      console.error("   3. Ensure no firewall is blocking the connection")
-    } else if (error.name === "AbortError") {
-      console.error("\n🔧 Troubleshooting:")
-      console.error("   1. ComfyUI might be starting up - wait a moment and try again")
-      console.error("   2. Check if ComfyUI is overloaded with other tasks")
-      console.error("   3. Increase timeout if you have a slow system")
+    if (error.name === "AbortError") {
+      logger.error("Connection timeout (5 seconds)")
+    } else {
+      logger.error(`Connection failed: ${error.message}`)
     }
-
-    process.exit(1)
+    return false
   }
 }
 
-// Run the test
-testComfyUI()
+async function testObjectInfo() {
+  logger.info("Testing object info endpoint...")
+
+  try {
+    const response = await fetch(`${CONFIG.comfyuiUrl}/object_info`)
+
+    if (!response.ok) {
+      logger.error(`HTTP ${response.status}: ${response.statusText}`)
+      return false
+    }
+
+    const objectInfo = await response.json()
+    logger.success("Object info retrieved successfully")
+
+    // Check for required nodes
+    const requiredNodes = ["CheckpointLoaderSimple", "CLIPTextEncode", "KSampler", "VAEDecode", "SaveImage"]
+    const availableNodes = Object.keys(objectInfo)
+
+    logger.info("Checking required nodes...")
+    for (const node of requiredNodes) {
+      if (availableNodes.includes(node)) {
+        logger.success(`✅ ${node} - Available`)
+      } else {
+        logger.error(`❌ ${node} - Missing`)
+      }
+    }
+
+    // Check available models
+    if (objectInfo.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0]) {
+      const models = objectInfo.CheckpointLoaderSimple.input.required.ckpt_name[0]
+      logger.info(`Available models: ${models.length}`)
+      models.slice(0, 5).forEach((model) => logger.info(`  - ${model}`))
+      if (models.length > 5) {
+        logger.info(`  ... and ${models.length - 5} more`)
+      }
+
+      // Check if test model is available
+      if (models.includes(CONFIG.testModel)) {
+        logger.success(`✅ Test model found: ${CONFIG.testModel}`)
+      } else {
+        logger.warn(`⚠️  Test model not found: ${CONFIG.testModel}`)
+        logger.info("Available models for testing:")
+        models.slice(0, 3).forEach((model) => logger.info(`  - ${model}`))
+      }
+    } else {
+      logger.warn("No checkpoint models found")
+    }
+
+    return true
+  } catch (error) {
+    logger.error(`Object info test failed: ${error.message}`)
+    return false
+  }
+}
+
+async function testQueue() {
+  logger.info("Testing queue endpoint...")
+
+  try {
+    const response = await fetch(`${CONFIG.comfyuiUrl}/queue`)
+
+    if (!response.ok) {
+      logger.error(`HTTP ${response.status}: ${response.statusText}`)
+      return false
+    }
+
+    const queueData = await response.json()
+    logger.success("Queue endpoint accessible")
+    logger.info(`Queue running: ${queueData.queue_running?.length || 0}`)
+    logger.info(`Queue pending: ${queueData.queue_pending?.length || 0}`)
+
+    return true
+  } catch (error) {
+    logger.error(`Queue test failed: ${error.message}`)
+    return false
+  }
+}
+
+async function createTestWorkflow() {
+  logger.info('Creating test workflow...')
+  
+  const workflow = {
+    "1": {
+      "inputs": {
+        "ckpt_name": CONFIG.testModel
+      },
+      "class_type": "CheckpointLoaderSimple",
+      "_meta": {
+        "title": "Load Checkpoint"
+      }
+    },
+    "2": {
+      "inputs": {
+        "text": CONFIG.testPrompt,
+        "clip": ["1", 1]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "CLIP Text Encode (Prompt)"
+      }
+    },
+    "3": {
+      "inputs": {
+        "text": "blurry, low quality, distorted",
+        "clip": ["1", 1]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "CLIP Text Encode (Negative)"
+      }
+    },
+    "4": {
+      "inputs": {
+        "width": 512,
+        "height": 512,
+        "batch_size": 1
+      },
+      "class_type": "EmptyLatentImage",
+      "_meta": {
+        "title": "Empty Latent Image"
+      }
+    },
+    "5": {
+      "inputs": {
+        "seed": Math.floor(Math.random() * 1000000),
+        "steps": 10, // Reduced steps for faster testing
+        "cfg": 7.5,
+        "sampler_name": "euler",
+        "scheduler": "normal",
+        "denoise": 1.0,
+        "model": ["1", 0],
+        "positive": ["2", 0],
+        "negative": ["3", 0],
+        "latent_image": ["4", 0]
+      },
+      "class_type": "KSampler",
+      "_meta": {
+        "title": "KSampler"
+      }
+    },
+    "6": {
+      "inputs": {
+        "samples": ["5", 0],
+        "vae": ["1", 2]
+      },
+      "class\
