@@ -9,7 +9,7 @@ A complete, zero-cost Instagram automation system that generates AI images using
 ### 1. Clone and Install
 \`\`\`bash
 git clone <your-repo>
-cd instagram-automation
+cd DIgiDallaProMAx
 npm install
 \`\`\`
 
