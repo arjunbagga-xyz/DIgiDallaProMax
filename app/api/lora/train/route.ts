@@ -179,15 +179,16 @@ export async function DELETE(request: NextRequest) {
 }
 
 function generateSampleImages(characterName: string) {
-  // Generate sample training data for demonstration
-  const sampleImages = []
-  for (let i = 1; i <= 5; i++) {
+  // In a real app, you'd use a library to generate placeholder images
+  const sampleImages = [];
+  for (let i = 1; i <= 20; i++) {
+    // Using a simple transparent pixel as a placeholder
     sampleImages.push({
-      data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", // 1x1 transparent PNG
-      caption: `${characterName.toLowerCase()}, high quality portrait, detailed face, consistent character, training image ${i}`,
-    })
+      data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+      caption: `${characterName}, high quality portrait, detailed face, training image ${i}`,
+    });
   }
-  return sampleImages
+  return sampleImages;
 }
 
 async function startTrainingProcess(trainingId: string, config: TrainingConfig) {

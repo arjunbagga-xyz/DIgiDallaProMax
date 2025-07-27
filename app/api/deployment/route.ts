@@ -158,40 +158,30 @@ async function processDeployment(deploymentId: string, platform: string, config:
 }
 
 async function deployToGitHubActions(deploymentId: string, config: DeploymentConfig) {
-  const status = deploymentStatuses.get(deploymentId)
-  if (!status) return
+  const status = deploymentStatuses.get(deploymentId);
+  if (!status) return;
 
-  status.progress = 20
-  status.logs.push("🔧 Generating GitHub Actions workflow...")
+  status.progress = 20;
+  status.logs.push("🔧 Generating GitHub Actions workflow...");
 
-  // Create .github/workflows directory
-  const workflowDir = join(process.cwd(), ".github", "workflows")
+  const workflowDir = join(process.cwd(), ".github", "workflows");
   if (!existsSync(workflowDir)) {
-    await mkdir(workflowDir, { recursive: true })
+    await mkdir(workflowDir, { recursive: true });
   }
 
-  // Generate workflow file
-  const workflowContent = generateGitHubActionsWorkflow(config)
-  const workflowPath = join(workflowDir, "instagram-automation.yml")
-  await writeFile(workflowPath, workflowContent)
+  const workflowContent = generateGitHubActionsWorkflow(config);
+  const workflowPath = join(workflowDir, "instagram-automation.yml");
+  await writeFile(workflowPath, workflowContent);
 
-  status.progress = 40
-  status.logs.push("📝 Created GitHub Actions workflow file")
+  status.progress = 40;
+  status.logs.push("📝 Created GitHub Actions workflow file");
 
-  // Generate secrets documentation
-  const secretsDoc = generateSecretsDocumentation()
-  await writeFile(join(process.cwd(), "GITHUB_SECRETS.md"), secretsDoc)
-
-  status.progress = 60
-  status.logs.push("📚 Generated secrets documentation")
-
-  // Simulate git operations
-  status.progress = 80
-  status.logs.push("📤 Ready to push to GitHub repository")
-  status.logs.push("ℹ️  Manual step: Push changes to your GitHub repository")
-  status.logs.push("ℹ️  Manual step: Configure secrets in GitHub repository settings")
-
-  status.url = config.settings.repositoryUrl || "https://github.com/your-username/your-repo"
+  // Simulate git operations and API calls to GitHub
+  setTimeout(() => {
+    status.progress = 80;
+    status.logs.push("📤 Simulating push to GitHub repository");
+    status.url = config.settings.repositoryUrl || "https://github.com/your-username/your-repo";
+  }, 5000);
 }
 
 async function deployToVercel(deploymentId: string, config: DeploymentConfig) {

@@ -246,87 +246,91 @@ export async function POST(request: NextRequest) {
 
 async function downloadModel(modelId: string) {
   // In a real implementation, this would download from Hugging Face
-  // For now, we'll simulate the download process
-
-  const allModels = [...AVAILABLE_MODELS.checkpoints, ...AVAILABLE_MODELS.loras]
-  const model = allModels.find((m) => m.id === modelId)
+// For now, we'll simulate the download process
+async function downloadModel(modelId: string) {
+  const allModels = [...AVAILABLE_MODELS.checkpoints, ...AVAILABLE_MODELS.loras];
+  const model = allModels.find((m) => m.id === modelId);
 
   if (!model) {
-    return NextResponse.json({ error: "Model not found" }, { status: 404 })
+    return NextResponse.json({ error: "Model not found" }, { status: 404 });
   }
 
-  // Simulate download process
-  const downloadId = `download_${modelId}_${Date.now()}`
+  const downloadId = `download_${modelId}_${Date.now()}`;
 
-  // In reality, you would:
-  // 1. Use Hugging Face Hub API
-  // 2. Download the actual model files
-  // 3. Verify checksums
-  // 4. Move to correct directory
+  // Simulate download process
+  setTimeout(async () => {
+    const models = await loadModelsConfig();
+    const existingModel = models.find((m) => m.id === modelId);
+    if (existingModel) {
+      existingModel.loaded = true;
+      await saveModelsConfig(models);
+      console.log(`Model ${model.name} downloaded and config updated.`);
+    }
+  }, 10000); // Simulate 10-second download
 
   return NextResponse.json({
     success: true,
     downloadId,
     message: `Started downloading ${model.name}`,
-    estimatedTime: Math.round(model.size / 10000000), // Rough estimate in seconds
+    estimatedTime: 10,
     model,
-  })
+  });
 }
 
 async function deleteModel(modelId: string) {
-  const models = await loadModelsConfig()
-  const modelIndex = models.findIndex((m) => m.id === modelId)
+  const models = await loadModelsConfig();
+  const modelIndex = models.findIndex((m) => m.id === modelId);
 
   if (modelIndex === -1) {
-    return NextResponse.json({ error: "Model not found" }, { status: 404 })
+    return NextResponse.json({ error: "Model not found" }, { status: 404 });
   }
 
-  const model = models[modelIndex]
+  const model = models[modelIndex];
 
   // In reality, you would delete the actual file
   // For now, just remove from config
-  models.splice(modelIndex, 1)
-  await saveModelsConfig(models)
+  models.splice(modelIndex, 1);
+  await saveModelsConfig(models);
 
   return NextResponse.json({
     success: true,
     message: `Deleted ${model.name}`,
-  })
+  });
 }
 
 async function setActiveModel(modelId: string) {
-  const models = await loadModelsConfig()
-  const model = models.find((m) => m.id === modelId)
+  const models = await loadModelsConfig();
+  const model = models.find((m) => m.id === modelId);
 
   if (!model) {
-    return NextResponse.json({ error: "Model not found" }, { status: 404 })
+    return NextResponse.json({ error: "Model not found" }, { status: 404 });
   }
 
   // Update last used timestamp
-  model.lastUsed = new Date().toISOString()
-  await saveModelsConfig(models)
+  model.lastUsed = new Date().toISOString();
+  await saveModelsConfig(models);
 
   return NextResponse.json({
     success: true,
     message: `Set ${model.name} as active`,
     model,
-  })
+  });
 }
 
 async function uploadModel(modelData: any) {
   // Handle model upload
-  const { name, type, file } = modelData
+  const { name, type, file } = modelData;
 
   if (!name || !type || !file) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  const modelId = name.toLowerCase().replace(/\s+/g, "-")
-  const models = await loadModelsConfig()
+  const modelId = name.toLowerCase().replace(/\s+/g, "-");
+  const models = await loadModelsConfig();
 
   // Check if model already exists
   if (models.find((m) => m.id === modelId)) {
-    return NextResponse.json({ error: "Model already exists" }, { status: 409 })
+    return NextResponse.json({ error: "Model already exists" }, { status: 409 });
   }
 
   // In reality, you would save the uploaded file
@@ -337,14 +341,14 @@ async function uploadModel(modelData: any) {
     size: file.size || 0,
     path: join(MODELS_DIR, type + "s", `${modelId}.safetensors`),
     loaded: true,
-  }
+  };
 
-  models.push(newModel)
-  await saveModelsConfig(models)
+  models.push(newModel);
+  await saveModelsConfig(models);
 
   return NextResponse.json({
     success: true,
     message: `Uploaded ${name} successfully`,
     model: newModel,
-  })
+  });
 }
