@@ -1,0 +1,12 @@
+[
+  {
+    "id": "char_1753685039849_mgst75p2n",
+    "name": "Test Character",
+    "personality": "Test Personality",
+    "backstory": "Test Backstory",
+    "instagramHandle": "@testcharacter",
+    "isActive": true,
+    "createdAt": "2025-07-28T06:43:59.849Z",
+    "updatedAt": "2025-07-28T06:43:59.849Z"
+  }
+]

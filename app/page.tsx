@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import io from 'socket.io-client';
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -192,6 +193,16 @@ export default function AutomationDashboard() {
 
   // Load all data
   useEffect(() => {
+    const socket = io();
+
+    socket.on('connect', () => {
+      console.log('connected to socket server');
+    });
+
+    socket.on('status_update', (status) => {
+      setSystemStatus(status);
+    });
+
     loadAllData()
 
     const interval = setInterval(() => {
@@ -200,7 +211,10 @@ export default function AutomationDashboard() {
       loadTrainings()
     }, 30000) // Check every 30 seconds
 
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+      socket.disconnect();
+    }
   }, [])
 
   const loadAllData = async () => {
@@ -428,14 +442,33 @@ export default function AutomationDashboard() {
   }
 
   const generateAndPost = async (characterId: string) => {
-    await generateImage(characterId)
-    // In a real app, you would check if the image was generated successfully
-    // and then post to Instagram.
-    toast({
-      title: "Info",
-      description: "Image generated. Posting to Instagram is not implemented in this demo.",
-    })
-  }
+    try {
+      await generateImage(characterId)
+      const response = await fetch("/api/post-to-instagram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ characterId }),
+      });
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Posted to Instagram successfully",
+        });
+      } else {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to post to Instagram");
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to post to Instagram",
+        variant: "destructive",
+      });
+    }
+  };
 
   const runScheduler = async () => {
     setIsLoading(true)
@@ -829,6 +862,7 @@ export default function AutomationDashboard() {
           <h1 className="text-3xl font-bold">Digital Dalla Dashboard</h1>
           <p className="text-gray-500">AI-powered Instagram automation with any model you choose</p>
 
+          {/* This is a placeholder that will be replaced with a real-time status indicator */}
           <div className="flex flex-wrap justify-center gap-2 mt-4">
             <StatusBadge status={systemStatus.comfyui} label="ComfyUI" />
             <StatusBadge status={systemStatus.database} label="Database" />
