@@ -428,13 +428,54 @@ export default function AutomationDashboard() {
   }
 
   const generateAndPost = async (characterId: string) => {
-    await generateImage(characterId)
-    // In a real app, you would check if the image was generated successfully
-    // and then post to Instagram.
-    toast({
-      title: "Info",
-      description: "Image generated. Posting to Instagram is not implemented in this demo.",
-    })
+    setIsLoading(true)
+    try {
+      const generationResult = await generateImage(characterId)
+
+      if (generationResult && generationResult.image) {
+        const character = characters.find((c) => c.id === characterId)
+        if (!character) {
+          throw new Error("Character not found")
+        }
+
+        const caption =
+          generationResult.prompt + `\n\n#aiart #characterdesign #${character.name.toLowerCase().replace(/\s/g, "")}`
+
+        toast({
+          title: "Posting to Instagram...",
+          description: "This may take a moment.",
+        })
+
+        const response = await fetch("/api/post-to-instagram", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            characterId: characterId,
+            imageBase64: generationResult.image,
+            caption: caption,
+          }),
+        })
+
+        if (response.ok) {
+          toast({
+            title: "Success!",
+            description: "Image posted to Instagram.",
+          })
+          loadCharacters() // Refresh character data
+        } else {
+          const error = await response.json()
+          throw new Error(error.details || error.error || "Failed to post to Instagram")
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "An unknown error occurred during the post process.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const runScheduler = async () => {
@@ -498,11 +539,10 @@ export default function AutomationDashboard() {
     }
   }
 
-  const generateImage = async (characterId: string) => {
+  const generateImage = async (characterId: string): Promise<any | null> => {
     const character = characters.find((c) => c.id === characterId)
-    if (!character) return
+    if (!character) return null
 
-    setIsLoading(true)
     setGenerationProgress({ ...generationProgress, [characterId]: 0 })
 
     try {
@@ -543,6 +583,7 @@ export default function AutomationDashboard() {
             return newProgress
           })
         }, 2000)
+        return result
       } else {
         const error = await response.json()
         throw new Error(error.error || "Failed to generate image")
@@ -558,8 +599,7 @@ export default function AutomationDashboard() {
         delete newProgress[characterId]
         return newProgress
       })
-    } finally {
-      setIsLoading(false)
+      return null
     }
   }
 
@@ -1093,7 +1133,15 @@ export default function AutomationDashboard() {
                     )}
 
                     <div className="flex flex-wrap gap-2">
-                      <Button size="sm" onClick={() => generateImage(character.id)} disabled={isLoading}>
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          setIsLoading(true)
+                          await generateImage(character.id)
+                          setIsLoading(false)
+                        }}
+                        disabled={isLoading}
+                      >
                         <ImageIcon className="w-4 h-4 mr-1" />
                         Generate
                       </Button>
@@ -1630,7 +1678,15 @@ export default function AutomationDashboard() {
                               >
                                 <Copy className="w-4 h-4" />
                               </Button>
-                              <Button size="sm" variant="ghost" onClick={() => generateImage(prompt.characterId)}>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={async () => {
+                                  setIsLoading(true)
+                                  await generateImage(prompt.characterId)
+                                  setIsLoading(false)
+                                }}
+                              >
                                 <ImageIcon className="w-4 h-4" />
                               </Button>
                             </div>

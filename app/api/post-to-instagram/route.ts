@@ -1,38 +1,62 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { readFile } from "fs/promises"
+import { join } from "path"
+
+interface Character {
+  id: string
+  name: string
+}
+
+async function loadCharacters(): Promise<Character[]> {
+  try {
+    const data = await readFile(join(process.cwd(), "data", "characters.json"), "utf-8")
+    return JSON.parse(data)
+  } catch (error) {
+    console.error("Failed to load characters:", error)
+    return []
+  }
+}
 
 interface InstagramPostRequest {
+  characterId: string
   imageBase64: string
   caption: string
-  accessToken?: string
-  accountId?: string
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { imageBase64, caption, accessToken, accountId }: InstagramPostRequest = await request.json()
+    const { characterId, imageBase64, caption }: InstagramPostRequest = await request.json()
 
-    if (!imageBase64 || !caption) {
-      return NextResponse.json({ error: "Image and caption are required" }, { status: 400 })
+    if (!characterId || !imageBase64 || !caption) {
+      return NextResponse.json({ error: "characterId, imageBase64, and caption are required" }, { status: 400 })
     }
 
-    const finalAccessToken = accessToken || process.env.INSTAGRAM_ACCESS_TOKEN
-    const finalAccountId = accountId || process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID
+    const characters = await loadCharacters()
+    const character = characters.find((c) => c.id === characterId)
 
-    if (!finalAccessToken || !finalAccountId) {
+    if (!character) {
+      return NextResponse.json({ error: "Character not found" }, { status: 404 })
+    }
+
+    const characterNameUpper = character.name.toUpperCase().replace(/\s/g, "_")
+    const accessToken = process.env[`${characterNameUpper}_INSTAGRAM_ACCESS_TOKEN`]
+    const accountId = process.env[`${characterNameUpper}_INSTAGRAM_ACCOUNT_ID`]
+
+    if (!accessToken || !accountId) {
       return NextResponse.json(
         {
-          error: "Instagram credentials not configured",
-          details: "Please set INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_BUSINESS_ACCOUNT_ID environment variables",
+          error: `Instagram credentials not configured for character: ${character.name}`,
+          details: `Please set ${characterNameUpper}_INSTAGRAM_ACCESS_TOKEN and ${characterNameUpper}_INSTAGRAM_ACCOUNT_ID environment variables.`,
         },
         { status: 400 },
       )
     }
 
-    console.log("🔄 Starting Instagram post process...")
+    console.log(`🔄 Starting Instagram post process for ${character.name}...`)
 
     // Step 1: Upload image to Instagram
     const imageBuffer = Buffer.from(imageBase64, "base64")
-    const uploadResponse = await uploadImageToInstagram(imageBuffer, finalAccessToken, finalAccountId)
+    const uploadResponse = await uploadImageToInstagram(imageBuffer, accessToken, accountId)
 
     if (!uploadResponse.success) {
       throw new Error(`Image upload failed: ${uploadResponse.error}`)
@@ -41,12 +65,7 @@ export async function POST(request: NextRequest) {
     console.log("✅ Image uploaded successfully, creation_id:", uploadResponse.creationId)
 
     // Step 2: Publish the post
-    const publishResponse = await publishInstagramPost(
-      uploadResponse.creationId,
-      caption,
-      finalAccessToken,
-      finalAccountId,
-    )
+    const publishResponse = await publishInstagramPost(uploadResponse.creationId, caption, accessToken, accountId)
 
     if (!publishResponse.success) {
       throw new Error(`Post publishing failed: ${publishResponse.error}`)
