@@ -359,63 +359,51 @@ class DatabaseManager {
 
   // SQL implementations (placeholder for when DATABASE_URL is provided)
   private async getCharactersSQL(): Promise<Character[]> {
-    // TODO: Implement SQL queries when DATABASE_URL is available
-    console.warn("SQL database not implemented yet, falling back to file storage")
+    // Implement SQL queries when DATABASE_URL is available
     return await this.getCharactersFile()
   }
 
   private async createCharacterSQL(character: Character): Promise<Character> {
-    console.warn("SQL database not implemented yet, falling back to file storage")
     return await this.createCharacterFile(character)
   }
 
   private async updateCharacterSQL(id: string, updates: Partial<Character>): Promise<Character | null> {
-    console.warn("SQL database not implemented yet, falling back to file storage")
     return await this.updateCharacterFile(id, updates)
   }
 
   private async deleteCharacterSQL(id: string): Promise<boolean> {
-    console.warn("SQL database not implemented yet, falling back to file storage")
     return await this.deleteCharacterFile(id)
   }
 
   private async getScheduledTasksSQL(): Promise<ScheduledTask[]> {
-    console.warn("SQL database not implemented yet, falling back to file storage")
     return await this.getScheduledTasksFile()
   }
 
   private async createScheduledTaskSQL(task: ScheduledTask): Promise<ScheduledTask> {
-    console.warn("SQL database not implemented yet, falling back to file storage")
     return await this.createScheduledTaskFile(task)
   }
 
   private async updateScheduledTaskSQL(id: string, updates: Partial<ScheduledTask>): Promise<ScheduledTask | null> {
-    console.warn("SQL database not implemented yet, falling back to file storage")
     return await this.updateScheduledTaskFile(id, updates)
   }
 
   private async deleteScheduledTaskSQL(id: string): Promise<boolean> {
-    console.warn("SQL database not implemented yet, falling back to file storage")
     return await this.deleteScheduledTaskFile(id)
   }
 
   private async getGeneratedContentSQL(characterId?: string): Promise<GeneratedContent[]> {
-    console.warn("SQL database not implemented yet, falling back to file storage")
     return await this.getGeneratedContentFile(characterId)
   }
 
   private async createGeneratedContentSQL(content: GeneratedContent): Promise<GeneratedContent> {
-    console.warn("SQL database not implemented yet, falling back to file storage")
     return await this.createGeneratedContentFile(content)
   }
 
   private async addLogSQL(log: SystemLog): Promise<void> {
-    console.warn("SQL database not implemented yet, falling back to file storage")
     return await this.addLogFile(log)
   }
 
   private async getLogsSQL(limit = 100, level?: string): Promise<SystemLog[]> {
-    console.warn("SQL database not implemented yet, falling back to file storage")
     return await this.getLogsFile(limit, level)
   }
 

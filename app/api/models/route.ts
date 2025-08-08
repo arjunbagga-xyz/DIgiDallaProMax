@@ -244,37 +244,28 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function downloadModel(modelId: string) {
-  // In a real implementation, this would download from Hugging Face
-// For now, we'll simulate the download process
+import { comfyUIClient } from "../../../lib/comfyui-complete";
+
 async function downloadModel(modelId: string) {
   const allModels = [...AVAILABLE_MODELS.checkpoints, ...AVAILABLE_MODELS.loras];
   const model = allModels.find((m) => m.id === modelId);
 
-  if (!model) {
-    return NextResponse.json({ error: "Model not found" }, { status: 404 });
+  if (!model || !model.downloadUrl) {
+    return NextResponse.json({ error: "Model not found or no download URL" }, { status: 404 });
   }
 
-  const downloadId = `download_${modelId}_${Date.now()}`;
+  const result = await comfyUIClient.downloadModel(model.downloadUrl, model.name, model.type);
 
-  // Simulate download process
-  setTimeout(async () => {
+  if (result.success) {
     const models = await loadModelsConfig();
     const existingModel = models.find((m) => m.id === modelId);
     if (existingModel) {
       existingModel.loaded = true;
       await saveModelsConfig(models);
-      console.log(`Model ${model.name} downloaded and config updated.`);
     }
-  }, 10000); // Simulate 10-second download
+  }
 
-  return NextResponse.json({
-    success: true,
-    downloadId,
-    message: `Started downloading ${model.name}`,
-    estimatedTime: 10,
-    model,
-  });
+  return NextResponse.json(result);
 }
 
 async function deleteModel(modelId: string) {

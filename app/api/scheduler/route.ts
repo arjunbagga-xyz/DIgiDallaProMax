@@ -521,49 +521,20 @@ async function updateSettings(settings: SchedulerSettings) {
   })
 }
 
+import { parseExpression } from "cron-parser"
+
 function calculateNextRun(schedule: string, lastRun?: string): string {
-  const now = new Date()
-  const lastRunDate = lastRun ? new Date(lastRun) : now
-
-  // Handle simple intervals (e.g., "6h", "30m", "1d")
-  if (schedule.match(/^\d+[hmd]$/)) {
-    const value = Number.parseInt(schedule)
-    const unit = schedule.slice(-1)
-
-    let milliseconds = 0
-    switch (unit) {
-      case "m":
-        milliseconds = value * 60 * 1000
-        break
-      case "h":
-        milliseconds = value * 60 * 60 * 1000
-        break
-      case "d":
-        milliseconds = value * 24 * 60 * 60 * 1000
-        break
+  try {
+    const options = {
+      currentDate: lastRun ? new Date(lastRun) : new Date(),
     }
-
-    return new Date(Math.max(now.getTime(), lastRunDate.getTime()) + milliseconds).toISOString()
+    const interval = parseExpression(schedule, options)
+    return interval.next().toISOString()
+  } catch (err) {
+    console.error("Error parsing cron expression:", err)
+    // Fallback for invalid expression
+    const now = new Date()
+    now.setHours(now.getHours() + 1)
+    return now.toISOString()
   }
-
-  // Handle cron expressions (simplified)
-  if (schedule.includes("*")) {
-    // For demo purposes, assume daily at specified hour
-    const parts = schedule.split(" ")
-    if (parts.length >= 2) {
-      const hour = Number.parseInt(parts[1]) || 18
-      const nextRun = new Date(now)
-      nextRun.setHours(hour, 0, 0, 0)
-
-      // If time has passed today, schedule for tomorrow
-      if (nextRun <= now) {
-        nextRun.setDate(nextRun.getDate() + 1)
-      }
-
-      return nextRun.toISOString()
-    }
-  }
-
-  // Default: next hour
-  return new Date(now.getTime() + 60 * 60 * 1000).toISOString()
 }

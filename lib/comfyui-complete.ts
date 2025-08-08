@@ -359,19 +359,52 @@ export class ComfyUIClient {
     }
   }
 
-  async downloadModel(modelUrl: string, modelName: string): Promise<{ success: boolean; message: string }> {
+  async downloadModel(modelUrl: string, modelName: string, modelType?: string): Promise<{ success: boolean; message: string }> {
     try {
-      // This would typically involve downloading the model file
-      // For now, we'll return a placeholder response
+      const fetch = (await import('node-fetch')).default
+      const fs = await import('fs/promises')
+      const path = await import('path')
+
+      const modelDir = this.getModelDirectory(modelType || this.detectModelType(modelName));
+      const filePath = path.join(modelDir, modelName);
+
+      const response = await fetch(modelUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download model: ${response.statusText}`);
+      }
+
+      const fileStream = require('fs').createWriteStream(filePath);
+      await new Promise((resolve, reject) => {
+        response.body.pipe(fileStream);
+        response.body.on("error", reject);
+        fileStream.on("finish", resolve);
+      });
+
       return {
         success: true,
-        message: `Model download initiated for ${modelName}. Check ComfyUI console for progress.`,
+        message: `Model ${modelName} downloaded successfully to ${filePath}.`,
       }
     } catch (error) {
       return {
         success: false,
         message: error instanceof Error ? error.message : "Failed to download model",
       }
+    }
+  }
+
+  private getModelDirectory(modelType: string): string {
+    const basePath = process.env.COMFYUI_BASE_PATH || path.join(process.cwd(), 'ComfyUI');
+    switch (modelType) {
+      case 'checkpoint':
+        return path.join(basePath, 'models', 'checkpoints');
+      case 'lora':
+        return path.join(basePath, 'models', 'loras');
+      case 'vae':
+        return path.join(basePath, 'models', 'vaes');
+      case 'controlnet':
+        return path.join(basePath, 'models', 'controlnet');
+      default:
+        return path.join(basePath, 'models', 'misc');
     }
   }
 
