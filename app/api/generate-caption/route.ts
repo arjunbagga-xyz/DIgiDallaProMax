@@ -1,16 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "")
-
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, character } = await request.json()
+    const { prompt, character, apiKey } = await request.json()
 
     if (!prompt || !character) {
       return NextResponse.json({ error: "Prompt and character are required" }, { status: 400 })
     }
 
+    const genAI = new GoogleGenerativeAI(apiKey || process.env.GEMINI_API_KEY || "")
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
 
     const generationPrompt = `
@@ -21,6 +20,12 @@ export async function POST(request: NextRequest) {
       - Name: ${character.name}
       - Personality: ${character.personality}
       - Backstory: ${character.backstory}
+
+      ${narrative ? `
+      **Current Narrative:**
+      - Title: ${narrative.title}
+      - Description: ${narrative.description}
+      ` : ""}
 
       **Image Generation Prompt:**
       \`\`\`

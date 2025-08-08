@@ -73,6 +73,13 @@ interface Character {
     mood?: string
     customPrompts?: string[]
   }
+  narratives?: {
+    id: string
+    title: string
+    description: string
+    startDate: string
+    endDate: string
+  }[]
 }
 
 interface SystemStatus {
@@ -174,6 +181,7 @@ export default function AutomationDashboard() {
       mood: "",
       customPrompts: [] as string[],
     },
+    narratives: [] as { id: string; title: string; description: string; startDate: string; endDate: string }[],
   })
   const [generationProgress, setGenerationProgress] = useState<{ [key: string]: number }>({})
   const [newTask, setNewTask] = useState({
@@ -198,6 +206,22 @@ export default function AutomationDashboard() {
   const [loraTrainingCharacter, setLoraTrainingCharacter] = useState<Character | null>(null)
   const [trainingImages, setTrainingImages] = useState<string[]>([])
   const [promptCaptions, setPromptCaptions] = useState<{ [key: string]: string }>({})
+  const [geminiApiKey, setGeminiApiKey] = useState("")
+
+  useEffect(() => {
+    const storedApiKey = localStorage.getItem("geminiApiKey")
+    if (storedApiKey) {
+      setGeminiApiKey(storedApiKey)
+    }
+  }, [])
+
+  const saveGeminiApiKey = () => {
+    localStorage.setItem("geminiApiKey", geminiApiKey)
+    toast({
+      title: "Success",
+      description: "Gemini API key saved.",
+    })
+  }
 
   // Load all data
   useEffect(() => {
@@ -220,7 +244,6 @@ export default function AutomationDashboard() {
       loadModels(),
       loadTrainings(),
       loadPrompts(),
-      loadAvailableModels(),
     ])
   }
 
@@ -270,6 +293,10 @@ export default function AutomationDashboard() {
       if (response.ok) {
         const data = await response.json()
         setModels(data.models || [])
+        const checkpoints = data.models.filter((m: ModelInfo) => m.type === "checkpoint").map((m: ModelInfo) => m.name)
+        const loras = data.models.filter((m: ModelInfo) => m.type === "lora").map((m: ModelInfo) => m.name)
+        setAvailableModels(checkpoints)
+        setAvailableLoras(loras)
       }
     } catch (error) {
       console.error("Failed to load models:", error)
@@ -297,21 +324,6 @@ export default function AutomationDashboard() {
       }
     } catch (error) {
       console.error("Failed to load prompts:", error)
-    }
-  }
-
-  const loadAvailableModels = async () => {
-    try {
-      const response = await fetch("/api/models?action=list")
-      if (response.ok) {
-        const data = await response.json()
-        const checkpoints = data.models.filter((m: ModelInfo) => m.type === "checkpoint").map((m: ModelInfo) => m.name)
-        const loras = data.models.filter((m: ModelInfo) => m.type === "lora").map((m: ModelInfo) => m.name)
-        setAvailableModels(checkpoints)
-        setAvailableLoras(loras)
-      }
-    } catch (error) {
-      console.error("Failed to load available models:", error)
     }
   }
 
@@ -428,10 +440,17 @@ export default function AutomationDashboard() {
         throw new Error("Prompt or character not found")
       }
 
+      const now = new Date()
+      const narrative = character.narratives?.find(n => {
+        const start = new Date(n.startDate)
+        const end = new Date(n.endDate)
+        return now >= start && now <= end
+      })
+
       const response = await fetch("/api/generate-caption", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt.prompt, character }),
+        body: JSON.stringify({ prompt: prompt.prompt, character, narrative, apiKey: geminiApiKey }),
       })
 
       if (response.ok) {
@@ -1002,20 +1021,21 @@ export default function AutomationDashboard() {
         </div>
 
         <Tabs defaultValue="characters" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="characters">Characters</TabsTrigger>
             <TabsTrigger value="models">Models & LoRA</TabsTrigger>
             <TabsTrigger value="scheduling">Scheduling</TabsTrigger>
             <TabsTrigger value="deployment">Deployment</TabsTrigger>
             <TabsTrigger value="prompts">Prompts</TabsTrigger>
             <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
 
           <TabsContent value="characters" className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">Character Management</h2>
               <div className="flex gap-2">
-                <Button onClick={loadAvailableModels} variant="outline" size="sm">
+                <Button onClick={loadModels} variant="outline" size="sm">
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Refresh Models
                 </Button>
@@ -1171,6 +1191,45 @@ export default function AutomationDashboard() {
                             />
                           </div>
                         </div>
+                      </div>
+                      <div className="space-y-4 border-t pt-4">
+                        <h4 className="font-medium">Narratives</h4>
+                        {newCharacter.narratives.map((narrative, index) => (
+                          <div key={narrative.id} className="space-y-2 border p-2 rounded-md">
+                            <Input value={narrative.title} placeholder="Title" onChange={(e) => {
+                              const newNarratives = [...newCharacter.narratives]
+                              newNarratives[index].title = e.target.value
+                              setNewCharacter({ ...newCharacter, narratives: newNarratives })
+                            }} />
+                            <Textarea value={narrative.description} placeholder="Description" onChange={(e) => {
+                              const newNarratives = [...newCharacter.narratives]
+                              newNarratives[index].description = e.target.value
+                              setNewCharacter({ ...newCharacter, narratives: newNarratives })
+                            }} />
+                            <div className="flex gap-2">
+                              <Input type="date" value={narrative.startDate} onChange={(e) => {
+                                const newNarratives = [...newCharacter.narratives]
+                                newNarratives[index].startDate = e.target.value
+                                setNewCharacter({ ...newCharacter, narratives: newNarratives })
+                              }} />
+                              <Input type="date" value={narrative.endDate} onChange={(e) => {
+                                const newNarratives = [...newCharacter.narratives]
+                                newNarratives[index].endDate = e.target.value
+                                setNewCharacter({ ...newCharacter, narratives: newNarratives })
+                              }} />
+                            </div>
+                            <Button size="sm" variant="destructive" onClick={() => {
+                              const newNarratives = [...newCharacter.narratives]
+                              newNarratives.splice(index, 1)
+                              setNewCharacter({ ...newCharacter, narratives: newNarratives })
+                            }}>Remove</Button>
+                          </div>
+                        ))}
+                        <Button size="sm" onClick={() => {
+                          const newNarratives = [...newCharacter.narratives]
+                          newNarratives.push({ id: `narrative_${Date.now()}`, title: "", description: "", startDate: "", endDate: "" })
+                          setNewCharacter({ ...newCharacter, narratives: newNarratives })
+                        }}>Add Narrative</Button>
                       </div>
                     </div>
                     <Button onClick={createCharacter} disabled={isLoading}>
@@ -1371,6 +1430,45 @@ export default function AutomationDashboard() {
                           </Select>
                         </div>
                       </div>
+                      <div className="space-y-4 border-t pt-4">
+                        <h4 className="font-medium">Narratives</h4>
+                        {editingCharacter.narratives?.map((narrative, index) => (
+                          <div key={narrative.id} className="space-y-2 border p-2 rounded-md">
+                            <Input value={narrative.title} placeholder="Title" onChange={(e) => {
+                              const newNarratives = [...editingCharacter.narratives || []]
+                              newNarratives[index].title = e.target.value
+                              setEditingCharacter({ ...editingCharacter, narratives: newNarratives })
+                            }} />
+                            <Textarea value={narrative.description} placeholder="Description" onChange={(e) => {
+                              const newNarratives = [...editingCharacter.narratives || []]
+                              newNarratives[index].description = e.target.value
+                              setEditingCharacter({ ...editingCharacter, narratives: newNarratives })
+                            }} />
+                            <div className="flex gap-2">
+                              <Input type="date" value={narrative.startDate} onChange={(e) => {
+                                const newNarratives = [...editingCharacter.narratives || []]
+                                newNarratives[index].startDate = e.target.value
+                                setEditingCharacter({ ...editingCharacter, narratives: newNarratives })
+                              }} />
+                              <Input type="date" value={narrative.endDate} onChange={(e) => {
+                                const newNarratives = [...editingCharacter.narratives || []]
+                                newNarratives[index].endDate = e.target.value
+                                setEditingCharacter({ ...editingCharacter, narratives: newNarratives })
+                              }} />
+                            </div>
+                            <Button size="sm" variant="destructive" onClick={() => {
+                              const newNarratives = [...editingCharacter.narratives || []]
+                              newNarratives.splice(index, 1)
+                              setEditingCharacter({ ...editingCharacter, narratives: newNarratives })
+                            }}>Remove</Button>
+                          </div>
+                        ))}
+                        <Button size="sm" onClick={() => {
+                          const newNarratives = [...editingCharacter.narratives || []]
+                          newNarratives.push({ id: `narrative_${Date.now()}`, title: "", description: "", startDate: "", endDate: "" })
+                          setEditingCharacter({ ...editingCharacter, narratives: newNarratives })
+                        }}>Add Narrative</Button>
+                      </div>
                   </div>
                   <Button onClick={() => updateCharacter(editingCharacter.id, editingCharacter)} disabled={isLoading}>
                     {isLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : "Save Changes"}
@@ -1556,6 +1654,28 @@ export default function AutomationDashboard() {
                 </ul>
                 <p>Supported file formats are <code className="bg-gray-100 p-1 rounded">.safetensors</code> and <code className="bg-gray-100 p-1 rounded">.ckpt</code> for checkpoints, and <code className="bg-gray-100 p-1 rounded">.safetensors</code> and <code className="bg-gray-100 p-1 rounded">.pt</code> for LoRAs.</p>
                 <p>After adding the files, click the "Refresh Models" button above to see them in the list.</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="settings" className="space-y-4">
+            <h2 className="text-2xl font-bold">Settings</h2>
+            <Card>
+              <CardHeader>
+                <CardTitle>API Keys</CardTitle>
+                <CardDescription>Manage your API keys for third-party services.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="gemini-api-key">Gemini API Key</Label>
+                  <Input
+                    id="gemini-api-key"
+                    type="password"
+                    value={geminiApiKey}
+                    onChange={(e) => setGeminiApiKey(e.target.value)}
+                    placeholder="Enter your Gemini API key"
+                  />
+                </div>
+                <Button onClick={saveGeminiApiKey}>Save API Key</Button>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1997,8 +2117,19 @@ export default function AutomationDashboard() {
                                       <p className="text-sm text-gray-600">{prompt.characterBackstory || "No backstory available."}</p>
                                       <Button size="sm" variant="outline" onClick={() => setEditingCharacter(characters.find(c => c.id === prompt.characterId) || null)} className="mt-2">
                                         <Edit className="w-4 h-4 mr-2" />
-                                        Edit Character
+                                        Edit Character & Narratives
                                       </Button>
+                                    </div>
+                                    <div>
+                                      <h4 className="font-semibold">Current Narrative</h4>
+                                      <p className="text-sm text-gray-600">
+                                        {characters.find(c => c.id === prompt.characterId)?.narratives?.find(n => {
+                                          const now = new Date()
+                                          const start = new Date(n.startDate)
+                                          const end = new Date(n.endDate)
+                                          return now >= start && now <= end
+                                        })?.title || "No active narrative."}
+                                      </p>
                                     </div>
                                     <div className="space-y-2">
                                       <h4 className="font-semibold">Generated Caption</h4>
