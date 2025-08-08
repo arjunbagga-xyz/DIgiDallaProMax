@@ -19,11 +19,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Progress } from "@/components/ui/progress"
 import { toast } from "@/hooks/use-toast"
 import {
   DollarSign,
+  ChevronDown,
   Plus,
   Play,
   User,
@@ -187,8 +193,11 @@ export default function AutomationDashboard() {
       postToInstagram: true,
     },
   })
-  const [editingCharacter, setEditingCharacter] = useState<string | null>(null)
+  const [editingCharacter, setEditingCharacter] = useState<Character | null>(null)
   const [deploymentStatus, setDeploymentStatus] = useState<{ [key: string]: any }>({})
+  const [loraTrainingCharacter, setLoraTrainingCharacter] = useState<Character | null>(null)
+  const [trainingImages, setTrainingImages] = useState<string[]>([])
+  const [promptCaptions, setPromptCaptions] = useState<{ [key: string]: string }>({})
 
   // Load all data
   useEffect(() => {
@@ -360,6 +369,123 @@ export default function AutomationDashboard() {
     }
   }
 
+  const postToTwitter = async (characterId: string) => {
+    setIsLoading(true)
+    try {
+      const generationResult = await generateImage(characterId)
+
+      if (generationResult && generationResult.image) {
+        const character = characters.find((c) => c.id === characterId)
+        if (!character) {
+          throw new Error("Character not found")
+        }
+
+        const caption =
+          generationResult.prompt + `\n\n#aiart #characterdesign #${character.name.toLowerCase().replace(/\s/g, "")}`
+
+        toast({
+          title: "Posting to X/Twitter...",
+          description: "This may take a moment.",
+        })
+
+        const response = await fetch("/api/post-to-twitter", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            imageBase64: generationResult.image,
+            caption: caption,
+          }),
+        })
+
+        if (response.ok) {
+          toast({
+            title: "Success!",
+            description: "Image posted to X/Twitter.",
+          })
+        } else {
+          const error = await response.json()
+          throw new Error(error.details || error.error || "Failed to post to X/Twitter")
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "An unknown error occurred during the post process.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const generateCaption = async (promptId: string, characterId: string) => {
+    setIsLoading(true)
+    try {
+      const prompt = prompts.find(p => p.id === promptId)
+      const character = characters.find(c => c.id === characterId)
+
+      if (!prompt || !character) {
+        throw new Error("Prompt or character not found")
+      }
+
+      const response = await fetch("/api/generate-caption", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: prompt.prompt, character }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setPromptCaptions({ ...promptCaptions, [promptId]: data.caption })
+        toast({
+          title: "Success",
+          description: "Caption generated successfully.",
+        })
+      } else {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to generate caption")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to generate caption",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const deletePrompt = async (promptId: string) => {
+    setIsLoading(true)
+    try {
+      const response = await fetch("/api/prompts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete_prompt", promptId }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Prompt deleted successfully",
+        })
+        loadPrompts()
+      } else {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to delete prompt")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete prompt",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const toggleTask = async (taskId: string) => {
     setIsLoading(true)
     try {
@@ -400,10 +526,8 @@ export default function AutomationDashboard() {
   const deleteCharacter = async (characterId: string) => {
     setIsLoading(true)
     try {
-      const response = await fetch("/api/characters", {
+      const response = await fetch(`/api/characters?id=${characterId}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: characterId }),
       })
 
       if (response.ok) {
@@ -619,7 +743,7 @@ export default function AutomationDashboard() {
           triggerWord: character.triggerWord,
           steps: 1000,
           learningRate: 1e-4,
-          trainingImages: [],
+          trainingImages: trainingImages.map(img => ({ data: img })),
         }),
       })
 
@@ -1072,7 +1196,7 @@ export default function AutomationDashboard() {
                         {character.name}
                       </div>
                       <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => setEditingCharacter(character.id)}>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingCharacter(character)}>
                           <Edit className="w-4 h-4" />
                         </Button>
                         <Button
@@ -1145,7 +1269,7 @@ export default function AutomationDashboard() {
                         <ImageIcon className="w-4 h-4 mr-1" />
                         Generate
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => trainLora(character.id)} disabled={isLoading}>
+                      <Button size="sm" variant="outline" onClick={() => setLoraTrainingCharacter(character)} disabled={isLoading}>
                         <Brain className="w-4 h-4 mr-1" />
                         Train LoRA
                       </Button>
@@ -1158,11 +1282,155 @@ export default function AutomationDashboard() {
                         <Zap className="w-4 h-4 mr-1" />
                         Post
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => postToTwitter(character.id)}
+                        disabled={isLoading}
+                      >
+                        <Zap className="w-4 h-4 mr-1" />
+                        Post to X
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
               ))}
             </div>
+
+            {editingCharacter && (
+              <Dialog open={!!editingCharacter} onOpenChange={() => setEditingCharacter(null)}>
+                <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Edit Character</DialogTitle>
+                    <DialogDescription>
+                      Update the details for {editingCharacter.name}.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="edit-name">Character Name</Label>
+                        <Input
+                          id="edit-name"
+                          value={editingCharacter.name}
+                          onChange={(e) => setEditingCharacter({ ...editingCharacter, name: e.target.value })}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="edit-triggerWord">Trigger Word</Label>
+                        <Input
+                          id="edit-triggerWord"
+                          value={editingCharacter.triggerWord}
+                          onChange={(e) => setEditingCharacter({ ...editingCharacter, triggerWord: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-personality">Personality</Label>
+                      <Input
+                        id="edit-personality"
+                        value={editingCharacter.personality}
+                        onChange={(e) => setEditingCharacter({ ...editingCharacter, personality: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-backstory">Backstory</Label>
+                      <Textarea
+                        id="edit-backstory"
+                        value={editingCharacter.backstory}
+                        onChange={(e) => setEditingCharacter({ ...editingCharacter, backstory: e.target.value })}
+                        rows={3}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="instagram">Instagram Handle</Label>
+                          <Input
+                            id="instagram"
+                            value={editingCharacter.instagramHandle}
+                            onChange={(e) => setEditingCharacter({ ...editingCharacter, instagramHandle: e.target.value })}
+                            placeholder="@character_handle"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="preferredModel">Preferred Model</Label>
+                          <Select
+                            value={editingCharacter.preferredModel}
+                            onValueChange={(value) => setEditingCharacter({ ...editingCharacter, preferredModel: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select model" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableModels.map((model) => (
+                                <SelectItem key={model} value={model}>
+                                  {model.replace(".safetensors", "").replace(".ckpt", "")}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                  </div>
+                  <Button onClick={() => updateCharacter(editingCharacter.id, editingCharacter)} disabled={isLoading}>
+                    {isLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : "Save Changes"}
+                  </Button>
+                </DialogContent>
+              </Dialog>
+            )}
+
+            {loraTrainingCharacter && (
+              <Dialog open={!!loraTrainingCharacter} onOpenChange={() => {
+                setLoraTrainingCharacter(null)
+                setTrainingImages([])
+              }}>
+                <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Train LoRA for {loraTrainingCharacter.name}</DialogTitle>
+                    <DialogDescription>
+                      Upload 10-20 images of the character for training. Use clear, high-quality images.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="training-images">Training Images</Label>
+                      <Input
+                        id="training-images"
+                        type="file"
+                        multiple
+                        accept="image/png, image/jpeg"
+                        onChange={(e) => {
+                          if (e.target.files) {
+                            const files = Array.from(e.target.files)
+                            const base64Promises = files.map(file => {
+                              return new Promise<string>((resolve, reject) => {
+                                const reader = new FileReader()
+                                reader.readAsDataURL(file)
+                                reader.onload = () => resolve(reader.result as string)
+                                reader.onerror = error => reject(error)
+                              })
+                            })
+                            Promise.all(base64Promises).then(images => {
+                              setTrainingImages(images.map(img => img.split(',')[1]))
+                            })
+                          }
+                        }}
+                      />
+                    </div>
+                    {trainingImages.length > 0 && (
+                      <div className="grid grid-cols-4 gap-2">
+                        {trainingImages.map((image, index) => (
+                          <img key={index} src={`data:image/jpeg;base64,${image}`} alt={`Training image ${index + 1}`} className="rounded-md object-cover w-full h-24" />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <Button onClick={() => trainLora(loraTrainingCharacter.id)} disabled={isLoading || trainingImages.length === 0}>
+                    {isLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : "Start Training"}
+                  </Button>
+                </DialogContent>
+              </Dialog>
+            )}
           </TabsContent>
 
           <TabsContent value="models" className="space-y-4">
@@ -1178,25 +1446,53 @@ export default function AutomationDashboard() {
               <Card>
                 <CardHeader>
                   <CardTitle>Available Models</CardTitle>
-                  <CardDescription>Checkpoint models detected from ComfyUI</CardDescription>
+                  <CardDescription>Checkpoint models available for use or download.</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {availableModels.slice(0, 10).map((model) => (
-                      <div key={model} className="flex justify-between items-center">
+                    {models.filter(m => m.type === 'checkpoint').map((model) => (
+                      <div key={model.id} className="flex justify-between items-center">
                         <div>
-                          <span className="font-medium">{model.replace(".safetensors", "").replace(".ckpt", "")}</span>
+                          <span className="font-medium">{model.name.replace(".safetensors", "").replace(".ckpt", "")}</span>
                           <Badge variant="outline" className="ml-2">
-                            {model.includes("flux") ? "Flux" : model.includes("xl") ? "SDXL" : "SD1.5"}
+                            {model.name.includes("flux") ? "Flux" : model.name.includes("xl") ? "SDXL" : "SD1.5"}
                           </Badge>
                         </div>
-                        <Badge variant="default">Available</Badge>
+                        <Badge variant={model.loaded ? "default" : "secondary"}>
+                          {model.loaded ? "Loaded" : "Not Loaded"}
+                        </Badge>
                       </div>
                     ))}
                   </div>
-                  {availableModels.length === 0 && (
+                  {models.filter(m => m.type === 'checkpoint').length === 0 && (
                     <div className="text-sm text-gray-600">
-                      No models found. Make sure ComfyUI is running and models are installed.
+                      No checkpoint models found.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Available LoRAs</CardTitle>
+                  <CardDescription>LoRA models available for use or download.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {models.filter(m => m.type === 'lora').map((model) => (
+                      <div key={model.id} className="flex justify-between items-center">
+                        <div>
+                          <span className="font-medium">{model.name.replace(".safetensors", "").replace(".pt", "")}</span>
+                        </div>
+                        <Badge variant={model.loaded ? "default" : "secondary"}>
+                          {model.loaded ? "Loaded" : "Not Loaded"}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                  {models.filter(m => m.type === 'lora').length === 0 && (
+                    <div className="text-sm text-gray-600">
+                      No LoRA models found.
                     </div>
                   )}
                 </CardContent>
@@ -1247,6 +1543,21 @@ export default function AutomationDashboard() {
                 </CardContent>
               </Card>
             </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>How to Add Models</CardTitle>
+                <CardDescription>Instructions for adding your own models.</CardDescription>
+              </CardHeader>
+              <CardContent className="text-sm text-gray-600 space-y-2">
+                <p>To add your own models, place the files in the following directories in the project's root:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>For checkpoint models (e.g., SDXL, SD1.5): <code className="bg-gray-100 p-1 rounded">models/checkpoints/</code></li>
+                  <li>For LoRA models: <code className="bg-gray-100 p-1 rounded">models/loras/</code></li>
+                </ul>
+                <p>Supported file formats are <code className="bg-gray-100 p-1 rounded">.safetensors</code> and <code className="bg-gray-100 p-1 rounded">.ckpt</code> for checkpoints, and <code className="bg-gray-100 p-1 rounded">.safetensors</code> and <code className="bg-gray-100 p-1 rounded">.pt</code> for LoRAs.</p>
+                <p>After adding the files, click the "Refresh Models" button above to see them in the list.</p>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="scheduling" className="space-y-4">
@@ -1453,7 +1764,7 @@ export default function AutomationDashboard() {
                         <TableHead>Schedule</TableHead>
                         <TableHead>Config</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1498,127 +1809,87 @@ export default function AutomationDashboard() {
           </TabsContent>
 
           <TabsContent value="deployment" className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Deployment Options</h2>
-              <Button onClick={loadAvailableModels} variant="outline">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Refresh Status
-              </Button>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardTitle>GitHub Actions</CardTitle>
-                  <CardDescription>Free cloud automation</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <p className="text-sm">✅ Completely free</p>
-                    <p className="text-sm">✅ Always running</p>
-                    <p className="text-sm">✅ No maintenance</p>
-                    <p className="text-sm">⚠️ 2000 min/month limit</p>
-                  </div>
-
-                  {deploymentStatus.github && (
-                    <div className="p-2 bg-gray-50 rounded text-xs">
-                      Status: {deploymentStatus.github.status || "Ready"}
-                    </div>
-                  )}
-
-                  <Button className="w-full" onClick={deployToGitHub} disabled={isLoading}>
-                    {isLoading ? (
-                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Github className="w-4 h-4 mr-2" />
-                    )}
-                    Deploy to GitHub
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Vercel</CardTitle>
-                  <CardDescription>Serverless deployment</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <p className="text-sm">✅ Serverless functions</p>
-                    <p className="text-sm">✅ Automatic scaling</p>
-                    <p className="text-sm">✅ Built-in cron jobs</p>
-                    <p className="text-sm">💰 Usage-based pricing</p>
-                  </div>
-
-                  {deploymentStatus.vercel && (
-                    <div className="p-2 bg-gray-50 rounded text-xs">
-                      Status: {deploymentStatus.vercel.status || "Ready"}
-                    </div>
-                  )}
-
-                  <Button className="w-full" onClick={deployToVercel} disabled={isLoading}>
-                    {isLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
-                    Deploy to Vercel
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Docker</CardTitle>
-                  <CardDescription>Containerized deployment</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <p className="text-sm">✅ Consistent environment</p>
-                    <p className="text-sm">✅ Easy scaling</p>
-                    <p className="text-sm">✅ Self-hosted</p>
-                    <p className="text-sm">💰 Server costs</p>
-                  </div>
-
-                  {deploymentStatus.docker && (
-                    <div className="p-2 bg-gray-50 rounded text-xs">
-                      Status: {deploymentStatus.docker.status || "Ready"}
-                    </div>
-                  )}
-
-                  <Button className="w-full" onClick={deployToDocker} disabled={isLoading}>
-                    {isLoading ? (
-                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Upload className="w-4 h-4 mr-2" />
-                    )}
-                    Setup Docker
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-
+            <h2 className="text-2xl font-bold">Deployment Instructions</h2>
             <Card>
               <CardHeader>
-                <CardTitle>Deployment Status</CardTitle>
-                <CardDescription>Monitor your deployments</CardDescription>
+                <CardTitle>Recommended: GitHub Actions (Serverless)</CardTitle>
+                <CardDescription>The best choice for most users due to its generous free tier and ease of use.</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {Object.keys(deploymentStatus).length > 0 ? (
-                    Object.entries(deploymentStatus).map(([platform, status]) => (
-                      <div key={platform} className="flex justify-between items-center p-3 border rounded">
-                        <div>
-                          <div className="font-medium capitalize">{platform}</div>
-                          <div className="text-sm text-gray-600">{status.message || "Deployment configured"}</div>
-                        </div>
-                        <Badge variant={status.success ? "default" : "destructive"}>
-                          {status.success ? "Success" : "Failed"}
-                        </Badge>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-sm text-gray-600">No deployments configured yet.</div>
-                  )}
+              <CardContent className="space-y-4 text-sm">
+                <div>
+                  <h4 className="font-semibold">Why GitHub Actions is Perfect:</h4>
+                  <ul className="list-disc pl-5 mt-2">
+                    <li>✅ **Generous Free Tier:** 2000 minutes/month, enough for ~400 posts.</li>
+                    <li>✅ **Serverless:** No infrastructure to manage.</li>
+                    <li>✅ **Reliable:** Built-in scheduling, scaling, and monitoring.</li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="font-semibold">Setup Steps:</h4>
+                  <ol className="list-decimal pl-5 mt-2 space-y-1">
+                    <li>Fork the repository.</li>
+                    <li>Add the necessary secrets to your GitHub repository (e.g., `HUGGINGFACE_TOKEN`, `INSTAGRAM_ACCESS_TOKEN`).</li>
+                    <li>Enable GitHub Actions in your repository settings.</li>
+                    <li>Customize the schedule in `.github/workflows/instagram-bot.yml` if needed.</li>
+                    <li>Deploy and monitor from the "Actions" tab in your repository.</li>
+                  </ol>
                 </div>
               </CardContent>
             </Card>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Alternative: Local Machine + Cron Job</CardTitle>
+                  <CardDescription>For power users who want to run the bot on their own hardware.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  <div>
+                    <h4 className="font-semibold">Pros & Cons:</h4>
+                    <ul className="list-disc pl-5 mt-2">
+                      <li>✅ **Unlimited Compute:** Use your own hardware's full power.</li>
+                      <li>✅ **Full Control:** Customize everything.</li>
+                      <li>❌ **Requires an always-on computer.**</li>
+                      <li>❌ **Manual maintenance and updates.**</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold">Setup Steps:</h4>
+                    <ol className="list-decimal pl-5 mt-2 space-y-1">
+                      <li>Clone the repository locally.</li>
+                      <li>Install dependencies with `npm install`.</li>
+                      <li>Create a `.env.local` file with your environment variables.</li>
+                      <li>Run the application with `npm run dev`.</li>
+                      <li>Set up a scheduler (like `cron` on Linux/Mac or Task Scheduler on Windows) to run `node scripts/scheduler-daemon.js` periodically.</li>
+                    </ol>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Alternative: Docker Deployment</CardTitle>
+                  <CardDescription>For users who prefer containerized deployments.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  <div>
+                    <h4 className="font-semibold">Pros & Cons:</h4>
+                    <ul className="list-disc pl-5 mt-2">
+                      <li>✅ **Consistent Environment:** Runs the same everywhere.</li>
+                      <li>✅ **Isolated Dependencies:** No conflicts with other projects.</li>
+                      <li>❌ **Requires Docker to be installed.**</li>
+                      <li>❌ **Slightly more complex initial setup.**</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold">Setup Steps:</h4>
+                    <ol className="list-decimal pl-5 mt-2 space-y-1">
+                      <li>Create a `Dockerfile` in your project root (a sample is in the documentation).</li>
+                      <li>Build the Docker image: `docker build -t instagram-ai-bot .`</li>
+                      <li>Run the container, passing your environment variables: `docker run -p 3000:3000 -d --env-file .env.local instagram-ai-bot`</li>
+                    </ol>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="prompts" className="space-y-4">
@@ -1653,45 +1924,101 @@ export default function AutomationDashboard() {
                     </TableHeader>
                     <TableBody>
                       {prompts.slice(0, 10).map((prompt) => (
-                        <TableRow key={prompt.id}>
-                          <TableCell>{prompt.characterName}</TableCell>
-                          <TableCell className="max-w-xs">
-                            <div className="truncate" title={prompt.prompt}>
-                              {prompt.prompt}
-                            </div>
-                          </TableCell>
-                          <TableCell>{new Date(prompt.createdAt).toLocaleDateString()}</TableCell>
-                          <TableCell>
-                            <Badge variant={prompt.used ? "default" : "secondary"}>
-                              {prompt.used ? "Used" : "Available"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(prompt.prompt)
-                                  toast({ title: "Copied", description: "Prompt copied to clipboard" })
-                                }}
-                              >
-                                <Copy className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={async () => {
-                                  setIsLoading(true)
-                                  await generateImage(prompt.characterId)
-                                  setIsLoading(false)
-                                }}
-                              >
-                                <ImageIcon className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
+                        <Collapsible key={prompt.id} asChild>
+                          <>
+                            <TableRow>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <img src={prompt.characterAvatar || "/placeholder-user.jpg"} alt={prompt.characterName} className="w-8 h-8 rounded-full" />
+                                  {prompt.characterName}
+                                </div>
+                              </TableCell>
+                              <TableCell className="max-w-xs">
+                                <div className="truncate" title={prompt.prompt}>
+                                  {prompt.prompt}
+                                </div>
+                              </TableCell>
+                              <TableCell>{new Date(prompt.createdAt).toLocaleDateString()}</TableCell>
+                              <TableCell>
+                                <Badge variant={prompt.used ? "default" : "secondary"}>
+                                  {prompt.used ? "Used" : "Available"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex gap-1 justify-end">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(prompt.prompt)
+                                      toast({ title: "Copied", description: "Prompt copied to clipboard" })
+                                    }}
+                                  >
+                                    <Copy className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={async () => {
+                                      setIsLoading(true)
+                                      await generateImage(prompt.characterId)
+                                      setIsLoading(false)
+                                    }}
+                                  >
+                                    <ImageIcon className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-red-500 hover:text-red-700"
+                                    onClick={() => {
+                                      if (confirm("Are you sure you want to delete this prompt?")) {
+                                        deletePrompt(prompt.id)
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                  <CollapsibleTrigger asChild>
+                                    <Button variant="ghost" size="sm">
+                                      <ChevronDown className="h-4 w-4" />
+                                      <span className="sr-only">Toggle</span>
+                                    </Button>
+                                  </CollapsibleTrigger>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                            <CollapsibleContent asChild>
+                              <TableRow>
+                                <TableCell colSpan={5} className="p-4 bg-gray-50">
+                                  <div className="space-y-4">
+                                    <div>
+                                      <h4 className="font-semibold">Backstory</h4>
+                                      <p className="text-sm text-gray-600">{prompt.characterBackstory || "No backstory available."}</p>
+                                      <Button size="sm" variant="outline" onClick={() => setEditingCharacter(characters.find(c => c.id === prompt.characterId) || null)} className="mt-2">
+                                        <Edit className="w-4 h-4 mr-2" />
+                                        Edit Character
+                                      </Button>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <h4 className="font-semibold">Generated Caption</h4>
+                                      <Textarea
+                                        value={promptCaptions[prompt.id] || prompt.caption || ""}
+                                        onChange={(e) => setPromptCaptions({ ...promptCaptions, [prompt.id]: e.target.value })}
+                                        placeholder="Generate a caption or write your own..."
+                                        rows={3}
+                                      />
+                                      <Button size="sm" onClick={() => generateCaption(prompt.id, prompt.characterId)} disabled={isLoading}>
+                                        {isLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Brain className="w-4 h-4 mr-2" />}
+                                        Generate with AI
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            </CollapsibleContent>
+                          </>
+                        </Collapsible>
                       ))}
                     </TableBody>
                   </Table>

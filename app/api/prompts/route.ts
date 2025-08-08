@@ -180,11 +180,16 @@ export async function GET(request: NextRequest) {
     let prompts = await loadPrompts()
     const characters = await loadCharacters()
 
-    // Enrich prompts with character names
-    prompts = prompts.map((prompt) => ({
-      ...prompt,
-      characterName: characters.find((c: any) => c.id === prompt.characterId)?.name || "Unknown",
-    }))
+    // Enrich prompts with character names and other details
+    prompts = prompts.map((prompt) => {
+      const character = characters.find((c: any) => c.id === prompt.characterId)
+      return {
+        ...prompt,
+        characterName: character?.name || "Unknown",
+        characterBackstory: character?.backstory || "",
+        characterAvatar: character?.avatarUrl || null, // Assuming an avatarUrl property
+      }
+    })
 
     // Filter by character
     if (characterId) {
