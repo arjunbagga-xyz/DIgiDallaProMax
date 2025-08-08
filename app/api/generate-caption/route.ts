@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, character, apiKey } = await request.json()
+    const { prompt, character, narrative, apiKey } = await request.json()
 
     if (!prompt || !character) {
       return NextResponse.json({ error: "Prompt and character are required" }, { status: 400 })

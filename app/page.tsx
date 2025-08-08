@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import {
   Dialog,
@@ -80,6 +81,8 @@ interface Character {
     startDate: string
     endDate: string
   }[]
+  instagramApiKey?: string
+  twitterApiKey?: string
 }
 
 interface SystemStatus {
@@ -165,8 +168,8 @@ export default function AutomationDashboard() {
   const [trainings, setTrainings] = useState<TrainingStatus[]>([])
   const [prompts, setPrompts] = useState<GeneratedPrompt[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [availableModels, setAvailableModels] = useState<string[]>([])
-  const [availableLoras, setAvailableLoras] = useState<string[]>([])
+  const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
+  const [availableLoras, setAvailableLoras] = useState<ModelInfo[]>([])
   const [newCharacter, setNewCharacter] = useState({
     name: "",
     personality: "",
@@ -174,6 +177,8 @@ export default function AutomationDashboard() {
     instagramHandle: "",
     preferredModel: "",
     triggerWord: "",
+    instagramApiKey: "",
+    twitterApiKey: "",
     promptSettings: {
       basePrompt: "",
       negativePrompt: "",
@@ -207,6 +212,8 @@ export default function AutomationDashboard() {
   const [trainingImages, setTrainingImages] = useState<string[]>([])
   const [promptCaptions, setPromptCaptions] = useState<{ [key: string]: string }>({})
   const [geminiApiKey, setGeminiApiKey] = useState("")
+  const [promptSearchTerm, setPromptSearchTerm] = useState("")
+  const [selectedPrompts, setSelectedPrompts] = useState<string[]>([])
 
   useEffect(() => {
     const storedApiKey = localStorage.getItem("geminiApiKey")
@@ -244,6 +251,7 @@ export default function AutomationDashboard() {
       loadModels(),
       loadTrainings(),
       loadPrompts(),
+      loadAvailableModels(),
     ])
   }
 
@@ -293,10 +301,6 @@ export default function AutomationDashboard() {
       if (response.ok) {
         const data = await response.json()
         setModels(data.models || [])
-        const checkpoints = data.models.filter((m: ModelInfo) => m.type === "checkpoint").map((m: ModelInfo) => m.name)
-        const loras = data.models.filter((m: ModelInfo) => m.type === "lora").map((m: ModelInfo) => m.name)
-        setAvailableModels(checkpoints)
-        setAvailableLoras(loras)
       }
     } catch (error) {
       console.error("Failed to load models:", error)
@@ -324,6 +328,21 @@ export default function AutomationDashboard() {
       }
     } catch (error) {
       console.error("Failed to load prompts:", error)
+    }
+  }
+
+  const loadAvailableModels = async () => {
+    try {
+      const response = await fetch("/api/models?show=all")
+      if (response.ok) {
+        const data = await response.json()
+        const checkpoints = data.models.filter((m: ModelInfo) => m.type === "checkpoint")
+        const loras = data.models.filter((m: ModelInfo) => m.type === "lora")
+        setAvailableModels(checkpoints)
+        setAvailableLoras(loras)
+      }
+    } catch (error) {
+      console.error("Failed to load available models:", error)
     }
   }
 
@@ -374,6 +393,26 @@ export default function AutomationDashboard() {
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to create character",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const deleteSelectedPrompts = async () => {
+    setIsLoading(true)
+    try {
+      await Promise.all(selectedPrompts.map(id => deletePrompt(id)))
+      setSelectedPrompts([])
+      toast({
+        title: "Success",
+        description: "Selected prompts deleted successfully.",
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete some of the selected prompts.",
         variant: "destructive",
       })
     } finally {
@@ -1035,7 +1074,7 @@ export default function AutomationDashboard() {
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">Character Management</h2>
               <div className="flex gap-2">
-                <Button onClick={loadModels} variant="outline" size="sm">
+                <Button onClick={loadAvailableModels} variant="outline" size="sm">
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Refresh Models
                 </Button>
@@ -1117,12 +1156,38 @@ export default function AutomationDashboard() {
                             </SelectTrigger>
                             <SelectContent>
                               {availableModels.map((model) => (
-                                <SelectItem key={model} value={model}>
-                                  {model.replace(".safetensors", "").replace(".ckpt", "")}
+                                <SelectItem key={model.id} value={model.name}>
+                                  {model.name.replace(".safetensors", "").replace(".ckpt", "")}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4 border-t pt-4">
+                        <h4 className="font-medium">API Keys</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="grid gap-2">
+                            <Label htmlFor="instagram-api-key">Instagram API Key</Label>
+                            <Input
+                              id="instagram-api-key"
+                              type="password"
+                              value={newCharacter.instagramApiKey}
+                              onChange={(e) => setNewCharacter({ ...newCharacter, instagramApiKey: e.target.value })}
+                              placeholder="Enter Instagram API Key"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="twitter-api-key">X/Twitter API Key</Label>
+                            <Input
+                              id="twitter-api-key"
+                              type="password"
+                              value={newCharacter.twitterApiKey}
+                              onChange={(e) => setNewCharacter({ ...newCharacter, twitterApiKey: e.target.value })}
+                              placeholder="Enter X/Twitter API Key"
+                            />
+                          </div>
                         </div>
                       </div>
 
@@ -1188,6 +1253,31 @@ export default function AutomationDashboard() {
                                 })
                               }
                               placeholder="e.g., serene, dramatic"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-4 border-t pt-4">
+                        <h4 className="font-medium">API Keys</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-instagram-api-key">Instagram API Key</Label>
+                            <Input
+                              id="edit-instagram-api-key"
+                              type="password"
+                              value={editingCharacter.instagramApiKey}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, instagramApiKey: e.target.value })}
+                              placeholder="Enter Instagram API Key"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-twitter-api-key">X/Twitter API Key</Label>
+                            <Input
+                              id="edit-twitter-api-key"
+                              type="password"
+                              value={editingCharacter.twitterApiKey}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterApiKey: e.target.value })}
+                              placeholder="Enter X/Twitter API Key"
                             />
                           </div>
                         </div>
@@ -1422,8 +1512,8 @@ export default function AutomationDashboard() {
                             </SelectTrigger>
                             <SelectContent>
                               {availableModels.map((model) => (
-                                <SelectItem key={model} value={model}>
-                                  {model.replace(".safetensors", "").replace(".ckpt", "")}
+                                <SelectItem key={model.id} value={model.name}>
+                                  {model.name.replace(".safetensors", "").replace(".ckpt", "")}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -1730,7 +1820,8 @@ export default function AutomationDashboard() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="generate_and_post">Generate & Post</SelectItem>
+                              <SelectItem value="generate_and_post">Post to Instagram</SelectItem>
+                              <SelectItem value="generate_and_post_to_twitter">Post to X/Twitter</SelectItem>
                               <SelectItem value="generate_only">Generate Only</SelectItem>
                               <SelectItem value="train_lora">Train LoRA</SelectItem>
                             </SelectContent>
@@ -1778,35 +1869,6 @@ export default function AutomationDashboard() {
                             placeholder="Override character's negative prompt..."
                             rows={2}
                           />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="grid gap-2">
-                            <Label>Style</Label>
-                            <Input
-                              value={newTask.config.style}
-                              onChange={(e) =>
-                                setNewTask({
-                                  ...newTask,
-                                  config: { ...newTask.config, style: e.target.value },
-                                })
-                              }
-                              placeholder="e.g., cinematic, portrait"
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label>Mood</Label>
-                            <Input
-                              value={newTask.config.mood}
-                              onChange={(e) =>
-                                setNewTask({
-                                  ...newTask,
-                                  config: { ...newTask.config, mood: e.target.value },
-                                })
-                              }
-                              placeholder="e.g., dramatic, peaceful"
-                            />
-                          </div>
                         </div>
 
                         <div className="grid grid-cols-3 gap-4">
@@ -2031,10 +2093,42 @@ export default function AutomationDashboard() {
                 <CardDescription>AI-generated prompts for your characters</CardDescription>
               </CardHeader>
               <CardContent>
+                <div className="mb-4">
+                  <Input
+                    placeholder="Search prompts..."
+                    value={promptSearchTerm}
+                    onChange={(e) => setPromptSearchTerm(e.target.value)}
+                    className="max-w-sm"
+                  />
+                  {selectedPrompts.length > 0 && (
+                    <Button
+                      variant="destructive"
+                      onClick={() => {
+                        if (confirm(`Are you sure you want to delete ${selectedPrompts.length} prompts?`)) {
+                          deleteSelectedPrompts()
+                        }
+                      }}
+                    >
+                      Delete Selected ({selectedPrompts.length})
+                    </Button>
+                  )}
+                </div>
                 {prompts.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead>
+                          <Checkbox
+                            checked={selectedPrompts.length === prompts.filter((prompt) => prompt.prompt.toLowerCase().includes(promptSearchTerm.toLowerCase())).slice(0, 10).length && prompts.length > 0}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedPrompts(prompts.filter((prompt) => prompt.prompt.toLowerCase().includes(promptSearchTerm.toLowerCase())).slice(0, 10).map(p => p.id))
+                              } else {
+                                setSelectedPrompts([])
+                              }
+                            }}
+                          />
+                        </TableHead>
                         <TableHead>Character</TableHead>
                         <TableHead>Prompt</TableHead>
                         <TableHead>Generated</TableHead>
@@ -2043,10 +2137,27 @@ export default function AutomationDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {prompts.slice(0, 10).map((prompt) => (
+                      {prompts
+                        .filter((prompt) =>
+                          prompt.prompt.toLowerCase().includes(promptSearchTerm.toLowerCase())
+                        )
+                        .slice(0, 10)
+                        .map((prompt) => (
                         <Collapsible key={prompt.id} asChild>
                           <>
                             <TableRow>
+                              <TableCell>
+                                <Checkbox
+                                  checked={selectedPrompts.includes(prompt.id)}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setSelectedPrompts([...selectedPrompts, prompt.id])
+                                    } else {
+                                      setSelectedPrompts(selectedPrompts.filter(id => id !== prompt.id))
+                                    }
+                                  }}
+                                />
+                              </TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-2">
                                   <img src={prompt.characterAvatar || "/placeholder-user.jpg"} alt={prompt.characterName} className="w-8 h-8 rounded-full" />

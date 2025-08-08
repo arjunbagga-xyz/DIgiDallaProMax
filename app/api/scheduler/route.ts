@@ -7,7 +7,7 @@ interface ScheduledTask {
   id: string
   characterId: string
   characterName?: string
-  type: "generate_and_post" | "train_lora" | "backup" | "generate_only"
+  type: "generate_and_post" | "generate_and_post_to_twitter" | "train_lora" | "backup" | "generate_only"
   schedule: string // cron expression or interval
   active: boolean
   lastRun?: string
@@ -41,6 +41,56 @@ async function ensureDataDirectory() {
   const dataDir = join(process.cwd(), "data")
   if (!existsSync(dataDir)) {
     await mkdir(dataDir, { recursive: true })
+  }
+}
+
+async function executeGenerateAndPostToTwitter(task: ScheduledTask) {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+
+  // Generate image
+  const generateResponse = await fetch(`${baseUrl}/api/generate-image`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      characterId: task.characterId,
+      fluxModel: task.config?.fluxModel || "flux-dev",
+      customPrompt: task.config?.customPrompt,
+    }),
+  })
+
+  if (!generateResponse.ok) {
+    const error = await generateResponse.json()
+    throw new Error(`Image generation failed: ${error.error}`)
+  }
+
+  const generateResult = await generateResponse.json()
+
+  // Post to X/Twitter
+  const postResponse = await fetch(`${baseUrl}/api/post-to-twitter`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      imageBase64: generateResult.image,
+      caption: generateResult.caption || `${generateResult.prompt} ✨\n\n#AIArt #GeneratedContent #DigitalArt`,
+    }),
+  })
+
+  if (postResponse.ok) {
+    return {
+      generated: true,
+      posted: true,
+      prompt: generateResult.prompt,
+      caption: generateResult.caption,
+    }
+  } else {
+    const postError = await postResponse.json()
+    return {
+      generated: true,
+      posted: false,
+      prompt: generateResult.prompt,
+      caption: generateResult.caption,
+      postError: postError.error,
+    }
   }
 }
 
@@ -231,6 +281,8 @@ async function executeTask(task: ScheduledTask) {
   switch (task.type) {
     case "generate_and_post":
       return await executeGenerateAndPost(task)
+    case "generate_and_post_to_twitter":
+      return await executeGenerateAndPostToTwitter(task)
     case "generate_only":
       return await executeGenerateOnly(task)
     case "train_lora":

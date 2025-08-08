@@ -194,6 +194,11 @@ export async function GET(request: NextRequest) {
     if (loaded !== null) {
       const isLoaded = loaded === "true"
       models = models.filter((m) => m.loaded === isLoaded)
+    } else {
+      const show = searchParams.get("show")
+      if (show !== "all") {
+        models = models.filter((m) => m.loaded === true)
+      }
     }
 
     // Sort by type, then by name
