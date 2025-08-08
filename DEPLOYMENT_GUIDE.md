@@ -84,18 +84,67 @@
 - ❌ No built-in monitoring
 
 ### Setup:
-\`\`\`bash
-# Install dependencies
-npm install
 
-# Set up cron job (Linux/Mac)
-crontab -e
+1.  **Clone the repository:**
 
-# Add line for every 8 hours:
-0 */8 * * * cd /path/to/project && node scripts/local-automation.js
+    ```bash
+    git clone https://github.com/your-username/instagram-ai-bot.git
+    cd instagram-ai-bot
+    ```
 
-# Windows: Use Task Scheduler
-\`\`\`
+2.  **Install dependencies:**
+
+    ```bash
+    npm install
+    ```
+
+3.  **Set up environment variables:**
+
+    Create a `.env.local` file in the root of your project and add the following variables:
+
+    ```
+    HUGGINGFACE_TOKEN="your_token"
+    INSTAGRAM_ACCESS_TOKEN="your_token"
+    INSTAGRAM_ACCOUNT_ID="your_account_id"
+    # Optional:
+    # COMFYUI_URL="http://localhost:8188"
+    ```
+
+4.  **Run the application in development mode:**
+
+    ```bash
+    npm run dev
+    ```
+
+    This will start the Next.js development server on `http://localhost:3000`.
+
+5.  **Set up a scheduler:**
+
+    To run the automation scripts periodically, you can use a cron job (on Linux/Mac) or the Task Scheduler (on Windows).
+
+    **Cron Job (Linux/Mac):**
+
+    Open your crontab file:
+
+    ```bash
+    crontab -e
+    ```
+
+    Add a line to run the scheduler script every 8 hours:
+
+    ```
+    0 */8 * * * cd /path/to/your/project && node scripts/scheduler-daemon.js
+    ```
+
+    **Task Scheduler (Windows):**
+
+    -   Open the Task Scheduler.
+    -   Create a new basic task.
+    -   Set the trigger to run daily, and repeat every 8 hours.
+    -   Set the action to start a program.
+    -   The program/script will be `node`.
+    -   Add arguments: `scripts/scheduler-daemon.js`.
+    -   Set the "Start in" directory to the root of your project.
 
 ## 🏆 Recommendation: GitHub Actions
 
@@ -117,6 +166,78 @@ crontab -e
 | Local Cron | $0 | Unlimited | Power users |
 | AWS Lambda | ~$1-5 | Pay per use | Enterprise |
 | Google Cloud Run | ~$2-10 | Pay per use | Enterprise |
+
+## 🐳 Alternative: Docker Deployment
+
+### Pros:
+- ✅ **Consistent Environment:** Runs the same everywhere
+- ✅ **Isolated Dependencies:** No conflicts with other projects
+- ✅ **Scalable:** Easy to deploy multiple instances
+- ✅ **Cloud-Ready:** Deployable on any cloud provider (AWS, GCP, Azure)
+
+### Cons:
+- ❌ Requires Docker to be installed
+- ❌ Slightly more complex initial setup
+
+### Docker Setup:
+
+1.  **Create a `Dockerfile` in the root of your project:**
+
+    ```Dockerfile
+    # Use an official Node.js runtime as a parent image
+    FROM node:18-slim
+
+    # Set the working directory
+    WORKDIR /usr/src/app
+
+    # Copy package.json and package-lock.json
+    COPY package*.json ./
+
+    # Install app dependencies
+    RUN npm install
+
+    # Copy app source
+    COPY . .
+
+    # Build the Next.js app
+    RUN npm run build
+
+    # Expose the port the app runs on
+    EXPOSE 3000
+
+    # Define the command to run the app
+    CMD ["npm", "start"]
+    ```
+
+2.  **Build the Docker image:**
+
+    ```bash
+    docker build -t instagram-ai-bot .
+    ```
+
+3.  **Run the Docker container:**
+
+    ```bash
+    docker run -p 3000:3000 -d --name my-bot \\
+      -e HUGGINGFACE_TOKEN="your_token" \\
+      -e INSTAGRAM_ACCESS_TOKEN="your_token" \\
+      -e INSTAGRAM_ACCOUNT_ID="your_account_id" \\
+      instagram-ai-bot
+    ```
+
+## ⚙️ Environment Variables
+
+Here is a list of all the environment variables the application uses:
+
+| Variable | Description | Example |
+| --- | --- | --- |
+| `HUGGINGFACE_TOKEN` | Your Hugging Face API token for model access. | `hf_...` |
+| `FLUX_MODEL` | The name of the Flux model to use for image generation. | `flux-dev` |
+| `INSTAGRAM_ACCESS_TOKEN` | Your Instagram Graph API access token. | `EAAG...` |
+| `INSTAGRAM_ACCOUNT_ID` | Your Instagram Account ID. | `178...` |
+| `CHARACTER_LORA` | (Optional) The name of a LoRA model to use for character consistency. | `my-character-lora` |
+| `COMFYUI_URL` | The URL of your ComfyUI instance (if using local ComfyUI). | `http://localhost:8188` |
+| `PYTHON_PATH` | The path to your Python executable (if not in the default location). | `/usr/bin/python3` |
 
 ## 🚀 Getting Started (5 Minutes)
 
