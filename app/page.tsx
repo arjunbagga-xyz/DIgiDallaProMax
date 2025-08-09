@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -20,11 +20,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Progress } from "@/components/ui/progress"
 import { toast } from "@/hooks/use-toast"
@@ -52,6 +48,7 @@ import {
   Target,
   Edit,
 } from "lucide-react"
+import Image from "next/image"
 
 interface Character {
   id: string
@@ -257,45 +254,7 @@ export default function AutomationDashboard() {
     })
   }
 
-  // Load all data
-  useEffect(() => {
-    loadAllData()
-
-    const interval = setInterval(() => {
-      checkSystemStatus()
-      loadScheduledTasks()
-      loadTrainings()
-    }, 30000) // Check every 30 seconds
-
-    return () => clearInterval(interval)
-  }, [])
-
-  const loadAllData = async () => {
-    await Promise.all([
-      checkSystemStatus(),
-      loadCharacters(),
-      loadScheduledTasks(),
-      loadModels(),
-      loadTrainings(),
-      loadPrompts(),
-      loadAvailableModels(),
-      loadContent(),
-    ])
-  }
-
-  const loadContent = async () => {
-    try {
-      const response = await fetch("/api/content")
-      if (response.ok) {
-        const data = await response.json()
-        setAllContent(data.content || [])
-      }
-    } catch (error) {
-      console.error("Failed to load content:", error)
-    }
-  }
-
-  const checkSystemStatus = async () => {
+  const checkSystemStatus = useCallback(async () => {
     try {
       const response = await fetch("/api/system/status")
       if (response.ok) {
@@ -305,9 +264,9 @@ export default function AutomationDashboard() {
     } catch (error) {
       console.error("Failed to check system status:", error)
     }
-  }
+  }, [])
 
-  const loadCharacters = async () => {
+  const loadCharacters = useCallback(async () => {
     try {
       const response = await fetch("/api/characters")
       if (response.ok) {
@@ -321,9 +280,9 @@ export default function AutomationDashboard() {
         variant: "destructive",
       })
     }
-  }
+  }, [])
 
-  const loadScheduledTasks = async () => {
+  const loadScheduledTasks = useCallback(async () => {
     try {
       const response = await fetch("/api/scheduler")
       if (response.ok) {
@@ -333,9 +292,9 @@ export default function AutomationDashboard() {
     } catch (error) {
       console.error("Failed to load scheduled tasks:", error)
     }
-  }
+  }, [])
 
-  const loadModels = async () => {
+  const loadModels = useCallback(async () => {
     try {
       const response = await fetch("/api/models")
       if (response.ok) {
@@ -345,9 +304,9 @@ export default function AutomationDashboard() {
     } catch (error) {
       console.error("Failed to load models:", error)
     }
-  }
+  }, [])
 
-  const loadTrainings = async () => {
+  const loadTrainings = useCallback(async () => {
     try {
       const response = await fetch("/api/lora/train")
       if (response.ok) {
@@ -357,9 +316,9 @@ export default function AutomationDashboard() {
     } catch (error) {
       console.error("Failed to load trainings:", error)
     }
-  }
+  }, [])
 
-  const loadPrompts = async () => {
+  const loadPrompts = useCallback(async () => {
     try {
       const response = await fetch("/api/prompts")
       if (response.ok) {
@@ -369,9 +328,9 @@ export default function AutomationDashboard() {
     } catch (error) {
       console.error("Failed to load prompts:", error)
     }
-  }
+  }, [])
 
-  const loadAvailableModels = async () => {
+  const loadAvailableModels = useCallback(async () => {
     try {
       const response = await fetch("/api/models?show=all")
       if (response.ok) {
@@ -384,7 +343,45 @@ export default function AutomationDashboard() {
     } catch (error) {
       console.error("Failed to load available models:", error)
     }
-  }
+  }, [])
+
+  const loadContent = useCallback(async () => {
+    try {
+      const response = await fetch("/api/content")
+      if (response.ok) {
+        const data = await response.json()
+        setAllContent(data.content || [])
+      }
+    } catch (error) {
+      console.error("Failed to load content:", error)
+    }
+  }, [])
+
+  const loadAllData = useCallback(async () => {
+    await Promise.all([
+      checkSystemStatus(),
+      loadCharacters(),
+      loadScheduledTasks(),
+      loadModels(),
+      loadTrainings(),
+      loadPrompts(),
+      loadAvailableModels(),
+      loadContent(),
+    ])
+  }, [checkSystemStatus, loadCharacters, loadScheduledTasks, loadModels, loadTrainings, loadPrompts, loadAvailableModels, loadContent])
+
+  // Load all data
+  useEffect(() => {
+    loadAllData()
+
+    const interval = setInterval(() => {
+      checkSystemStatus()
+      loadScheduledTasks()
+      loadTrainings()
+    }, 30000) // Check every 30 seconds
+
+    return () => clearInterval(interval)
+  }, [loadAllData, checkSystemStatus, loadScheduledTasks, loadTrainings])
 
   const createCharacter = async () => {
     if (!newCharacter.name || !newCharacter.personality) {
@@ -416,13 +413,21 @@ export default function AutomationDashboard() {
           instagramHandle: "",
           preferredModel: "",
           triggerWord: "",
+          instagramApiKey: "",
+          instagramAccountId: "",
+          twitterAccountId: "",
+          twitterAppKey: "",
+          twitterAppSecret: "",
+          twitterAccessToken: "",
+          twitterAccessSecret: "",
           promptSettings: {
             basePrompt: "",
             negativePrompt: "",
             style: "",
             mood: "",
-            customPrompts: [],
+            customPrompts: [] as string[],
           },
+          narratives: [] as { id: string; title: string; description: string; startDate: string; endDate: string }[],
         })
         loadCharacters()
       } else {
@@ -779,7 +784,7 @@ export default function AutomationDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          characterId: characterId,
+          characterId: content.characterId,
           imageUrl: content.imageUrl,
           caption: content.caption,
         }),
@@ -1274,7 +1279,7 @@ export default function AutomationDashboard() {
                           id="backstory"
                           value={newCharacter.backstory}
                           onChange={(e) => setNewCharacter({ ...newCharacter, backstory: e.target.value })}
-                          placeholder="Character's background story..."
+                          placeholder="Character&apos;s background story..."
                           rows={3}
                         />
                       </div>
@@ -1515,7 +1520,7 @@ export default function AutomationDashboard() {
                           size="sm"
                           variant="ghost"
                           onClick={() => {
-                            if (confirm("Are you sure you want to delete this character?")) {
+                            if (confirm('Are you sure you want to delete this character?')) {
                               deleteCharacter(character.id)
                             }
                           }}
@@ -1582,12 +1587,14 @@ export default function AutomationDashboard() {
                     {generatedContent[character.id] && (
                       <div className="mt-4 p-4 border rounded-lg">
                         <h4 className="font-bold mb-2">Generated Content</h4>
-                        <img
+                        <Image
                           src={generatedContent[character.id].imageUrl}
                           alt="Generated content"
                           className="rounded-md mb-2"
+                          width={512}
+                          height={512}
                         />
-                        <p className="text-sm italic">"{generatedContent[character.id].caption}"</p>
+                        <p className="text-sm italic">&quot;{generatedContent[character.id].caption}&quot;</p>
                       </div>
                     )}
                   </CardContent>
@@ -1651,7 +1658,7 @@ export default function AutomationDashboard() {
                     {trainingImages.length > 0 && (
                       <div className="grid grid-cols-4 gap-2">
                         {trainingImages.map((image, index) => (
-                          <img key={index} src={`data:image/jpeg;base64,${image}`} alt={`Training image ${index + 1}`} className="rounded-md object-cover w-full h-24" />
+                          <Image key={index} src={`data:image/jpeg;base64,${image}`} alt={`Training image ${index + 1}`} className="rounded-md object-cover w-full h-24" width={96} height={96} />
                         ))}
                       </div>
                     )}
@@ -2128,7 +2135,7 @@ export default function AutomationDashboard() {
                   <div>
                     <h4 className="font-semibold">Pros & Cons:</h4>
                     <ul className="list-disc pl-5 mt-2">
-                      <li>✅ **Unlimited Compute:** Use your own hardware's full power.</li>
+                      <li>✅ **Unlimited Compute:** Use your own hardware&apos;s full power.</li>
                       <li>✅ **Full Control:** Customize everything.</li>
                       <li>❌ **Requires an always-on computer.**</li>
                       <li>❌ **Manual maintenance and updates.**</li>
@@ -2165,8 +2172,8 @@ export default function AutomationDashboard() {
                     <h4 className="font-semibold">Setup Steps:</h4>
                     <ol className="list-decimal pl-5 mt-2 space-y-1">
                       <li>Create a `Dockerfile` in your project root (a sample is in the documentation).</li>
-                      <li>Build the Docker image: `docker build -t instagram-ai-bot .`</li>
-                      <li>Run the container, passing your environment variables: `docker run -p 3000:3000 -d --env-file .env.local instagram-ai-bot`</li>
+                      <li>Build the Docker image: <code className="bg-gray-100 p-1 rounded">docker build -t &quot;instagram-ai-bot&quot; .</code></li>
+                      <li>Run the container, passing your environment variables: <code className="bg-gray-100 p-1 rounded">docker run -p 3000:3000 -d --env-file .env.local instagram-ai-bot</code></li>
                     </ol>
                   </div>
                 </CardContent>
@@ -2194,10 +2201,12 @@ export default function AutomationDashboard() {
                             .map((contentItem) => (
                               <Card key={contentItem.id}>
                                 <CardContent className="p-4">
-                                  <img
+                                  <Image
                                     src={contentItem.imageUrl}
                                     alt="Generated content"
                                     className="rounded-md mb-2"
+                                    width={512}
+                                    height={512}
                                   />
                                   <Textarea
                                     value={contentItem.caption}
@@ -2380,7 +2389,7 @@ export default function AutomationDashboard() {
                           <Label htmlFor="edit-basePrompt">Base Prompt</Label>
                           <Textarea
                             id="edit-basePrompt"
-                            value={character.promptSettings?.basePrompt}
+                            value={character.promptSettings?.basePrompt || ""}
                             onChange={(e) => updateCharacter(character.id, { promptSettings: { ...(character.promptSettings || {}), basePrompt: e.target.value } })}
                             placeholder="Base prompt for image generation..."
                             rows={2}
@@ -2390,7 +2399,7 @@ export default function AutomationDashboard() {
                           <Label htmlFor="edit-negativePrompt">Negative Prompt</Label>
                           <Textarea
                             id="edit-negativePrompt"
-                            value={character.promptSettings?.negativePrompt}
+                            value={character.promptSettings?.negativePrompt || ""}
                             onChange={(e) => updateCharacter(character.id, { promptSettings: { ...(character.promptSettings || {}), negativePrompt: e.target.value } })}
                             placeholder="What to avoid in generation..."
                             rows={2}
@@ -2399,6 +2408,7 @@ export default function AutomationDashboard() {
                       </div>
                       </div>
                     </div>
+                  </div>
                   </AccordionContent>
                 </AccordionItem>
               ))}
