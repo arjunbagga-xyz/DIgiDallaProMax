@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
 
-let isSchedulerRunning = false
+export let isSchedulerRunning = false
 const cronJobs = new Map()
 
 async function fetchTasks() {

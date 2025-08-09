@@ -83,6 +83,7 @@ interface Character {
   }[]
   instagramApiKey?: string
   instagramAccountId?: string
+  twitterAccountId?: string
   twitterAppKey?: string
   twitterAppSecret?: string
   twitterAccessToken?: string
@@ -183,6 +184,7 @@ export default function AutomationDashboard() {
     triggerWord: "",
     instagramApiKey: "",
     instagramAccountId: "",
+    twitterAccountId: "",
     twitterAppKey: "",
     twitterAppSecret: "",
     twitterAccessToken: "",
@@ -1227,6 +1229,15 @@ export default function AutomationDashboard() {
                             />
                           </div>
                           <div className="grid gap-2">
+                            <Label htmlFor="twitter-account-id">X/Twitter Account ID</Label>
+                            <Input
+                              id="twitter-account-id"
+                              value={newCharacter.twitterAccountId}
+                              onChange={(e) => setNewCharacter({ ...newCharacter, twitterAccountId: e.target.value })}
+                              placeholder="Enter X/Twitter Account ID"
+                            />
+                          </div>
+                          <div className="grid gap-2">
                             <Label htmlFor="twitter-app-key">X/Twitter App Key</Label>
                             <Input
                               id="twitter-app-key"
@@ -1330,69 +1341,6 @@ export default function AutomationDashboard() {
                                 })
                               }
                               placeholder="e.g., serene, dramatic"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="space-y-4 border-t pt-4">
-                        <h4 className="font-medium">API Keys</h4>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="grid gap-2">
-                            <Label htmlFor="edit-instagram-account-id">Instagram Account ID</Label>
-                            <Input
-                              id="edit-instagram-account-id"
-                              value={editingCharacter.instagramAccountId}
-                              onChange={(e) => setEditingCharacter({ ...editingCharacter, instagramAccountId: e.target.value })}
-                              placeholder="Enter Instagram Account ID"
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label htmlFor="edit-instagram-api-key">Instagram API Key</Label>
-                            <Input
-                              id="edit-instagram-api-key"
-                              type="password"
-                              value={editingCharacter.instagramApiKey}
-                              onChange={(e) => setEditingCharacter({ ...editingCharacter, instagramApiKey: e.target.value })}
-                              placeholder="Enter Instagram API Key"
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label htmlFor="edit-twitter-app-key">X/Twitter App Key</Label>
-                            <Input
-                              id="edit-twitter-app-key"
-                              value={editingCharacter.twitterAppKey}
-                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAppKey: e.target.value })}
-                              placeholder="Enter X/Twitter App Key"
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label htmlFor="edit-twitter-app-secret">X/Twitter App Secret</Label>
-                            <Input
-                              id="edit-twitter-app-secret"
-                              type="password"
-                              value={editingCharacter.twitterAppSecret}
-                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAppSecret: e.target.value })}
-                              placeholder="Enter X/Twitter App Secret"
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label htmlFor="edit-twitter-access-token">X/Twitter Access Token</Label>
-                            <Input
-                              id="edit-twitter-access-token"
-                              type="password"
-                              value={editingCharacter.twitterAccessToken}
-                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAccessToken: e.target.value })}
-                              placeholder="Enter X/Twitter Access Token"
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label htmlFor="edit-twitter-access-secret">X/Twitter Access Secret</Label>
-                            <Input
-                              id="edit-twitter-access-secret"
-                              type="password"
-                              value={editingCharacter.twitterAccessSecret}
-                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAccessSecret: e.target.value })}
-                              placeholder="Enter X/Twitter Access Secret"
                             />
                           </div>
                         </div>
@@ -1639,6 +1587,15 @@ export default function AutomationDashboard() {
                         <h4 className="font-medium">API Keys</h4>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="grid gap-2">
+                            <Label htmlFor="edit-instagram-account-id">Instagram Account ID</Label>
+                            <Input
+                              id="edit-instagram-account-id"
+                              value={editingCharacter.instagramAccountId}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, instagramAccountId: e.target.value })}
+                              placeholder="Enter Instagram Account ID"
+                            />
+                          </div>
+                          <div className="grid gap-2">
                             <Label htmlFor="edit-instagram-api-key">Instagram API Key</Label>
                             <Input
                               id="edit-instagram-api-key"
@@ -1649,13 +1606,51 @@ export default function AutomationDashboard() {
                             />
                           </div>
                           <div className="grid gap-2">
-                            <Label htmlFor="edit-twitter-api-key">X/Twitter API Key</Label>
+                            <Label htmlFor="edit-twitter-account-id">X/Twitter Account ID</Label>
                             <Input
-                              id="edit-twitter-api-key"
+                              id="edit-twitter-account-id"
+                              value={editingCharacter.twitterAccountId}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAccountId: e.target.value })}
+                              placeholder="Enter X/Twitter Account ID"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-twitter-app-key">X/Twitter App Key</Label>
+                            <Input
+                              id="edit-twitter-app-key"
+                              value={editingCharacter.twitterAppKey}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAppKey: e.target.value })}
+                              placeholder="Enter X/Twitter App Key"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-twitter-app-secret">X/Twitter App Secret</Label>
+                            <Input
+                              id="edit-twitter-app-secret"
                               type="password"
-                              value={editingCharacter.twitterApiKey}
-                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterApiKey: e.target.value })}
-                              placeholder="Enter X/Twitter API Key"
+                              value={editingCharacter.twitterAppSecret}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAppSecret: e.target.value })}
+                              placeholder="Enter X/Twitter App Secret"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-twitter-access-token">X/Twitter Access Token</Label>
+                            <Input
+                              id="edit-twitter-access-token"
+                              type="password"
+                              value={editingCharacter.twitterAccessToken}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAccessToken: e.target.value })}
+                              placeholder="Enter X/Twitter Access Token"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-twitter-access-secret">X/Twitter Access Secret</Label>
+                            <Input
+                              id="edit-twitter-access-secret"
+                              type="password"
+                              value={editingCharacter.twitterAccessSecret}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAccessSecret: e.target.value })}
+                              placeholder="Enter X/Twitter Access Secret"
                             />
                           </div>
                         </div>
