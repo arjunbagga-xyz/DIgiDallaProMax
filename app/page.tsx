@@ -113,6 +113,7 @@ interface ScheduledTask {
   active: boolean
   lastRun?: string
   nextRun?: string
+  missedRuns?: { timestamp: string }[]
   config?: {
     prompt?: string
     negativePrompt?: string
