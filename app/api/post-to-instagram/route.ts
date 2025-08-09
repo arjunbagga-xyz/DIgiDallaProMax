@@ -21,16 +21,16 @@ async function loadCharacters(): Promise<Character[]> {
 
 interface InstagramPostRequest {
   characterId: string
-  imageBase64: string
+  imageUrl: string
   caption: string
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { characterId, imageBase64, caption }: InstagramPostRequest = await request.json()
+    const { characterId, imageUrl, caption }: InstagramPostRequest = await request.json()
 
-    if (!characterId || !imageBase64 || !caption) {
-      return NextResponse.json({ error: "characterId, imageBase64, and caption are required" }, { status: 400 })
+    if (!characterId || !imageUrl || !caption) {
+      return NextResponse.json({ error: "characterId, imageUrl, and caption are required" }, { status: 400 })
     }
 
     const characters = await loadCharacters()
@@ -55,8 +55,14 @@ export async function POST(request: NextRequest) {
 
     console.log(`🔄 Starting Instagram post process for ${character.name}...`)
 
+    // Fetch the image from the URL
+    const imageResponse = await fetch(imageUrl)
+    if (!imageResponse.ok) {
+      throw new Error(`Failed to fetch image from URL: ${imageUrl}`)
+    }
+    const imageBuffer = Buffer.from(await imageResponse.arrayBuffer())
+
     // Step 1: Upload image to Instagram
-    const imageBuffer = Buffer.from(imageBase64, "base64")
     const uploadResponse = await uploadImageToInstagram(imageBuffer, accessToken, accountId)
 
     if (!uploadResponse.success) {

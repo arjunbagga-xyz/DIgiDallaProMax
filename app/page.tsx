@@ -199,6 +199,7 @@ export default function AutomationDashboard() {
     narratives: [] as { id: string; title: string; description: string; startDate: string; endDate: string }[],
   })
   const [generationProgress, setGenerationProgress] = useState<{ [key: string]: number }>({})
+  const [generatedContent, setGeneratedContent] = useState<{ [key: string]: { imageUrl: string; caption: string } }>({})
   const [newTask, setNewTask] = useState({
     characterId: "",
     type: "generate_and_post",
@@ -514,43 +515,41 @@ export default function AutomationDashboard() {
   }
 
   const postToTwitter = async (characterId: string) => {
+    const content = generatedContent[characterId]
+    if (!content) {
+      toast({
+        title: "Error",
+        description: "Please generate content first.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsLoading(true)
     try {
-      const generationResult = await generateImage(characterId)
+      toast({
+        title: "Posting to X/Twitter...",
+        description: "This may take a moment.",
+      })
 
-      if (generationResult && generationResult.image) {
-        const character = characters.find((c) => c.id === characterId)
-        if (!character) {
-          throw new Error("Character not found")
-        }
-
-        const caption =
-          generationResult.prompt + `\n\n#aiart #characterdesign #${character.name.toLowerCase().replace(/\s/g, "")}`
-
-        toast({
-          title: "Posting to X/Twitter...",
-          description: "This may take a moment.",
-        })
-
-        const response = await fetch("/api/post-to-twitter", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+      const response = await fetch("/api/post-to-twitter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           characterId: characterId,
-            imageBase64: generationResult.image,
-            caption: caption,
-          }),
-        })
+          imageUrl: content.imageUrl,
+          caption: content.caption,
+        }),
+      })
 
-        if (response.ok) {
-          toast({
-            title: "Success!",
-            description: "Image posted to X/Twitter.",
-          })
-        } else {
-          const error = await response.json()
-          throw new Error(error.details || error.error || "Failed to post to X/Twitter")
-        }
+      if (response.ok) {
+        toast({
+          title: "Success!",
+          description: "Image posted to X/Twitter.",
+        })
+      } else {
+        const error = await response.json()
+        throw new Error(error.details || error.error || "Failed to post to X/Twitter")
       }
     } catch (error) {
       toast({
@@ -704,44 +703,42 @@ export default function AutomationDashboard() {
   }
 
   const generateAndPost = async (characterId: string) => {
+    const content = generatedContent[characterId]
+    if (!content) {
+      toast({
+        title: "Error",
+        description: "Please generate content first.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsLoading(true)
     try {
-      const generationResult = await generateImage(characterId)
+      toast({
+        title: "Posting to Instagram...",
+        description: "This may take a moment.",
+      })
 
-      if (generationResult && generationResult.image) {
-        const character = characters.find((c) => c.id === characterId)
-        if (!character) {
-          throw new Error("Character not found")
-        }
+      const response = await fetch("/api/post-to-instagram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          characterId: characterId,
+          imageUrl: content.imageUrl,
+          caption: content.caption,
+        }),
+      })
 
-        const caption =
-          generationResult.prompt + `\n\n#aiart #characterdesign #${character.name.toLowerCase().replace(/\s/g, "")}`
-
+      if (response.ok) {
         toast({
-          title: "Posting to Instagram...",
-          description: "This may take a moment.",
+          title: "Success!",
+          description: "Image posted to Instagram.",
         })
-
-        const response = await fetch("/api/post-to-instagram", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            characterId: characterId,
-            imageBase64: generationResult.image,
-            caption: caption,
-          }),
-        })
-
-        if (response.ok) {
-          toast({
-            title: "Success!",
-            description: "Image posted to Instagram.",
-          })
-          loadCharacters() // Refresh character data
-        } else {
-          const error = await response.json()
-          throw new Error(error.details || error.error || "Failed to post to Instagram")
-        }
+        loadCharacters() // Refresh character data
+      } else {
+        const error = await response.json()
+        throw new Error(error.details || error.error || "Failed to post to Instagram")
       }
     } catch (error) {
       toast({
@@ -815,11 +812,12 @@ export default function AutomationDashboard() {
     }
   }
 
-  const generateImage = async (characterId: string): Promise<any | null> => {
+  const generateContent = async (characterId: string) => {
     const character = characters.find((c) => c.id === characterId)
-    if (!character) return null
+    if (!character) return
 
     setGenerationProgress({ ...generationProgress, [characterId]: 0 })
+    setIsLoading(true)
 
     try {
       const progressInterval = setInterval(() => {
@@ -827,19 +825,12 @@ export default function AutomationDashboard() {
           ...prev,
           [characterId]: Math.min((prev[characterId] || 0) + 10, 90),
         }))
-      }, 500)
+      }, 1000)
 
-      const response = await fetch("/api/generate-image", {
+      const response = await fetch("/api/workflows/generate-content", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          characterId,
-          model: character.preferredModel,
-          prompt: character.promptSettings?.basePrompt,
-          negativePrompt: character.promptSettings?.negativePrompt,
-          loraPath: character.loraModelPath,
-          triggerWord: character.triggerWord,
-        }),
+        body: JSON.stringify({ character, apiKey: geminiApiKey }),
       })
 
       clearInterval(progressInterval)
@@ -847,35 +838,36 @@ export default function AutomationDashboard() {
 
       if (response.ok) {
         const result = await response.json()
+        setGeneratedContent({
+          ...generatedContent,
+          [characterId]: {
+            imageUrl: result.imageUrl,
+            caption: result.caption,
+          },
+        })
         toast({
           title: "Success",
-          description: `Image generated successfully for ${result.character}`,
+          description: "Content generated successfully!",
         })
-
-        setTimeout(() => {
-          setGenerationProgress((prev) => {
-            const newProgress = { ...prev }
-            delete newProgress[characterId]
-            return newProgress
-          })
-        }, 2000)
-        return result
       } else {
         const error = await response.json()
-        throw new Error(error.error || "Failed to generate image")
+        throw new Error(error.error || "Failed to generate content")
       }
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to generate image",
+        description: error instanceof Error ? error.message : "Failed to generate content",
         variant: "destructive",
       })
-      setGenerationProgress((prev) => {
-        const newProgress = { ...prev }
-        delete newProgress[characterId]
-        return newProgress
-      })
-      return null
+    } finally {
+      setIsLoading(false)
+      setTimeout(() => {
+        setGenerationProgress((prev) => {
+          const newProgress = { ...prev }
+          delete newProgress[characterId]
+          return newProgress
+        })
+      }, 2000)
     }
   }
 
@@ -1522,15 +1514,7 @@ export default function AutomationDashboard() {
                     )}
 
                     <div className="flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        onClick={async () => {
-                          setIsLoading(true)
-                          await generateImage(character.id)
-                          setIsLoading(false)
-                        }}
-                        disabled={isLoading}
-                      >
+                      <Button size="sm" onClick={() => generateContent(character.id)} disabled={isLoading}>
                         <ImageIcon className="w-4 h-4 mr-1" />
                         Generate
                       </Button>
@@ -1557,6 +1541,18 @@ export default function AutomationDashboard() {
                         Post to X
                       </Button>
                     </div>
+
+                    {generatedContent[character.id] && (
+                      <div className="mt-4 p-4 border rounded-lg">
+                        <h4 className="font-bold mb-2">Generated Content</h4>
+                        <img
+                          src={generatedContent[character.id].imageUrl}
+                          alt="Generated content"
+                          className="rounded-md mb-2"
+                        />
+                        <p className="text-sm italic">"{generatedContent[character.id].caption}"</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
@@ -2067,6 +2063,28 @@ export default function AutomationDashboard() {
                   />
                 </div>
                 <Button onClick={saveGeminiApiKey}>Save API Key</Button>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Artifact Storage</CardTitle>
+                <CardDescription>
+                  Locations where generated content and models are stored.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-sm text-gray-600 space-y-2">
+                <p>
+                  Character and scheduling data is stored in the <code>/data</code> directory.
+                </p>
+                <p>
+                  Generated content (images and captions) is tracked in <code>/data/content.json</code>.
+                </p>
+                <p>
+                  Trained LoRA models are saved to the <code>/training/[trainingId]/output</code> directory.
+                </p>
+                <p>
+                  Checkpoint models should be placed in <code>/models/checkpoints</code> and LoRA models in <code>/models/loras</code>.
+                </p>
               </CardContent>
             </Card>
           </TabsContent>

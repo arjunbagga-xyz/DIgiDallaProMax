@@ -24,10 +24,10 @@ async function loadCharacters(): Promise<Character[]> {
 
 export async function POST(request: NextRequest) {
   try {
-    const { characterId, imageBase64, caption } = await request.json()
+    const { characterId, imageUrl, caption } = await request.json()
 
-    if (!characterId || !imageBase64 || !caption) {
-      return NextResponse.json({ error: "Character ID, image, and caption are required" }, { status: 400 })
+    if (!characterId || !imageUrl || !caption) {
+      return NextResponse.json({ error: "Character ID, image URL, and caption are required" }, { status: 400 })
     }
 
     const characters = await loadCharacters()
@@ -46,8 +46,14 @@ export async function POST(request: NextRequest) {
 
     const twitterClient = client.readWrite
 
+    // Fetch image from URL
+    const imageResponse = await fetch(imageUrl)
+    if (!imageResponse.ok) {
+      throw new Error(`Failed to fetch image from URL: ${imageUrl}`)
+    }
+    const imageBuffer = Buffer.from(await imageResponse.arrayBuffer())
+
     // Upload image
-    const imageBuffer = Buffer.from(imageBase64, "base64")
     const mediaId = await twitterClient.v1.uploadMedia(imageBuffer, { mimeType: "image/png" })
 
     // Post tweet

@@ -46,51 +46,46 @@ async function ensureDataDirectory() {
 
 async function executeGenerateAndPostToTwitter(task: ScheduledTask) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+  const characters = await loadCharacters()
+  const character = characters.find((c: any) => c.id === task.characterId)
 
-  // Generate image
-  const generateResponse = await fetch(`${baseUrl}/api/generate-image`, {
+  if (!character) {
+    throw new Error("Character not found for task")
+  }
+
+  // Generate content (prompt, image, caption)
+  const generateResponse = await fetch(`${baseUrl}/api/workflows/generate-content`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      characterId: task.characterId,
-      fluxModel: task.config?.fluxModel || "flux-dev",
-      customPrompt: task.config?.customPrompt,
+      character,
+      apiKey: process.env.GEMINI_API_KEY,
     }),
   })
 
   if (!generateResponse.ok) {
     const error = await generateResponse.json()
-    throw new Error(`Image generation failed: ${error.error}`)
+    throw new Error(`Content generation failed: ${error.details || error.error}`)
   }
 
-  const generateResult = await generateResponse.json()
+  const generatedContent = await generateResponse.json()
 
   // Post to X/Twitter
   const postResponse = await fetch(`${baseUrl}/api/post-to-twitter`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      imageBase64: generateResult.image,
-      caption: generateResult.caption || `${generateResult.prompt} ✨\n\n#AIArt #GeneratedContent #DigitalArt`,
+      characterId: task.characterId,
+      imageUrl: generatedContent.imageUrl,
+      caption: generatedContent.caption,
     }),
   })
 
   if (postResponse.ok) {
-    return {
-      generated: true,
-      posted: true,
-      prompt: generateResult.prompt,
-      caption: generateResult.caption,
-    }
+    return { ...generatedContent, posted: true }
   } else {
     const postError = await postResponse.json()
-    return {
-      generated: true,
-      posted: false,
-      prompt: generateResult.prompt,
-      caption: generateResult.caption,
-      postError: postError.error,
-    }
+    return { ...generatedContent, posted: false, postError: postError.details || postError.error }
   }
 }
 
@@ -285,8 +280,6 @@ async function executeTask(task: ScheduledTask) {
       return await executeGenerateAndPost(task)
     case "generate_and_post_to_twitter":
       return await executeGenerateAndPostToTwitter(task)
-    case "generate_only":
-      return await executeGenerateOnly(task)
     case "train_lora":
       return await executeTrainLora(task)
     case "backup":
@@ -298,97 +291,52 @@ async function executeTask(task: ScheduledTask) {
 
 async function executeGenerateAndPost(task: ScheduledTask) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+  const characters = await loadCharacters()
+  const character = characters.find((c: any) => c.id === task.characterId)
 
-  // Generate image
-  const generateResponse = await fetch(`${baseUrl}/api/generate-image`, {
+  if (!character) {
+    throw new Error("Character not found for task")
+  }
+
+  // Generate content (prompt, image, caption)
+  const generateResponse = await fetch(`${baseUrl}/api/workflows/generate-content`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      characterId: task.characterId,
-      fluxModel: task.config?.fluxModel || "flux-dev",
-      customPrompt: task.config?.customPrompt,
-      style: task.config?.style,
-      mood: task.config?.mood,
+      character,
+      apiKey: process.env.GEMINI_API_KEY,
     }),
   })
 
   if (!generateResponse.ok) {
     const error = await generateResponse.json()
-    throw new Error(`Image generation failed: ${error.error}`)
+    throw new Error(`Content generation failed: ${error.details || error.error}`)
   }
 
-  const generateResult = await generateResponse.json()
+  const generatedContent = await generateResponse.json()
 
   // Post to Instagram if configured
-  if (task.config?.postToInstagram && process.env.INSTAGRAM_ACCESS_TOKEN) {
+  if (task.config?.postToInstagram) {
     const postResponse = await fetch(`${baseUrl}/api/post-to-instagram`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        imageBase64: generateResult.image,
-        caption: generateResult.caption || `${generateResult.prompt} ✨\n\n#AIArt #GeneratedContent #DigitalArt`,
         characterId: task.characterId,
+        imageUrl: generatedContent.imageUrl,
+        caption: generatedContent.caption,
       }),
     })
 
     if (postResponse.ok) {
       const postResult = await postResponse.json()
-      return {
-        generated: true,
-        posted: true,
-        prompt: generateResult.prompt,
-        caption: generateResult.caption,
-        postId: postResult.postId,
-        instagramUrl: postResult.permalink,
-      }
+      return { ...generatedContent, posted: true, postId: postResult.id }
     } else {
       const postError = await postResponse.json()
-      return {
-        generated: true,
-        posted: false,
-        prompt: generateResult.prompt,
-        caption: generateResult.caption,
-        postError: postError.error,
-      }
+      return { ...generatedContent, posted: false, postError: postError.details || postError.error }
     }
   }
 
-  return {
-    generated: true,
-    posted: false,
-    prompt: generateResult.prompt,
-    caption: generateResult.caption,
-    reason: task.config?.postToInstagram ? "Instagram posting failed" : "Instagram posting disabled",
-  }
-}
-
-async function executeGenerateOnly(task: ScheduledTask) {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
-
-  const generateResponse = await fetch(`${baseUrl}/api/generate-image`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      characterId: task.characterId,
-      fluxModel: task.config?.fluxModel || "flux-dev",
-      customPrompt: task.config?.customPrompt,
-      style: task.config?.style,
-      mood: task.config?.mood,
-    }),
-  })
-
-  if (!generateResponse.ok) {
-    const error = await generateResponse.json()
-    throw new Error(`Image generation failed: ${error.error}`)
-  }
-
-  const result = await generateResponse.json()
-  return {
-    generated: true,
-    posted: false,
-    prompt: result.prompt,
-    caption: result.caption,
-  }
+  return { ...generatedContent, posted: false, reason: "Instagram posting not enabled for this task" }
 }
 
 async function executeTrainLora(task: ScheduledTask) {
