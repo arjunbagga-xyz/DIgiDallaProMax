@@ -560,7 +560,7 @@ export default function AutomationDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          characterId: characterId,
+          characterId: content.characterId,
           imageUrl: content.imageUrl,
           caption: content.caption,
         }),
@@ -1576,24 +1576,6 @@ export default function AutomationDashboard() {
                         <Brain className="w-4 h-4 mr-1" />
                         Train LoRA
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => generateAndPost(character.id)}
-                        disabled={isLoading}
-                      >
-                        <Zap className="w-4 h-4 mr-1" />
-                        Post
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => postToTwitter(character.id)}
-                        disabled={isLoading}
-                      >
-                        <Zap className="w-4 h-4 mr-1" />
-                        Post to X
-                      </Button>
                     </div>
 
                     {generatedContent[character.id] && (
@@ -2398,7 +2380,7 @@ export default function AutomationDashboard() {
                           <Textarea
                             id="edit-basePrompt"
                             value={character.promptSettings?.basePrompt}
-                            onChange={(e) => updateCharacter(character.id, { promptSettings: { ...character.promptSettings, basePrompt: e.target.value } })}
+                            onChange={(e) => updateCharacter(character.id, { promptSettings: { ...(character.promptSettings || {}), basePrompt: e.target.value } })}
                             placeholder="Base prompt for image generation..."
                             rows={2}
                           />
@@ -2408,7 +2390,7 @@ export default function AutomationDashboard() {
                           <Textarea
                             id="edit-negativePrompt"
                             value={character.promptSettings?.negativePrompt}
-                            onChange={(e) => updateCharacter(character.id, { promptSettings: { ...character.promptSettings, negativePrompt: e.target.value } })}
+                            onChange={(e) => updateCharacter(character.id, { promptSettings: { ...(character.promptSettings || {}), negativePrompt: e.target.value } })}
                             placeholder="What to avoid in generation..."
                             rows={2}
                           />
