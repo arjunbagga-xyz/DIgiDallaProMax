@@ -1265,8 +1265,10 @@ export default function AutomationDashboard() {
                             <Input
                               id="edit-instagram-api-key"
                               type="password"
-                              value={editingCharacter.instagramApiKey}
-                              onChange={(e) => setEditingCharacter({ ...editingCharacter, instagramApiKey: e.target.value })}
+                              value={editingCharacter?.instagramApiKey || ''}
+                              onChange={(e) =>
+                                editingCharacter && setEditingCharacter({ ...editingCharacter, instagramApiKey: e.target.value })
+                              }
                               placeholder="Enter Instagram API Key"
                             />
                           </div>
@@ -1275,8 +1277,10 @@ export default function AutomationDashboard() {
                             <Input
                               id="edit-twitter-api-key"
                               type="password"
-                              value={editingCharacter.twitterApiKey}
-                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterApiKey: e.target.value })}
+                              value={editingCharacter?.twitterApiKey || ''}
+                              onChange={(e) =>
+                                editingCharacter && setEditingCharacter({ ...editingCharacter, twitterApiKey: e.target.value })
+                              }
                               placeholder="Enter X/Twitter API Key"
                             />
                           </div>
