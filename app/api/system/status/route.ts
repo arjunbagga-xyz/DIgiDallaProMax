@@ -76,16 +76,13 @@ async function checkDatabase(): Promise<"connected" | "disconnected" | "error"> 
   }
 }
 
+import { isSchedulerRunning } from "@/lib/scheduler"
+
 async function checkScheduler(): Promise<"running" | "stopped" | "error"> {
   try {
-    const { readFile } = await import("fs/promises")
-    const { join } = await import("path")
-
-    const pidFile = join(process.cwd(), "scheduler.pid")
-    await readFile(pidFile, "utf-8")
-    return "running"
+    return isSchedulerRunning ? "running" : "stopped"
   } catch (error) {
-    return "stopped"
+    return "error"
   }
 }
 
