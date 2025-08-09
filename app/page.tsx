@@ -219,11 +219,15 @@ export default function AutomationDashboard() {
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null)
   const [deploymentStatus, setDeploymentStatus] = useState<{ [key: string]: any }>({})
   const [loraTrainingCharacter, setLoraTrainingCharacter] = useState<Character | null>(null)
+  const [loraTrainingBaseModel, setLoraTrainingBaseModel] = useState<string>("")
   const [trainingImages, setTrainingImages] = useState<string[]>([])
   const [promptCaptions, setPromptCaptions] = useState<{ [key: string]: string }>({})
   const [geminiApiKey, setGeminiApiKey] = useState("")
   const [promptSearchTerm, setPromptSearchTerm] = useState("")
   const [selectedPrompts, setSelectedPrompts] = useState<string[]>([])
+  const [isGeneratingPrompts, setIsGeneratingPrompts] = useState(false)
+  const [generatePromptsCharacterId, setGeneratePromptsCharacterId] = useState<string>("")
+  const [generatePromptsCount, setGeneratePromptsCount] = useState<number>(10)
 
   useEffect(() => {
     const storedApiKey = localStorage.getItem("geminiApiKey")
@@ -403,6 +407,55 @@ export default function AutomationDashboard() {
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to create character",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const generateNewPrompts = async () => {
+    if (!generatePromptsCharacterId) {
+      toast({
+        title: "Error",
+        description: "Please select a character.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const character = characters.find((c) => c.id === generatePromptsCharacterId)
+      if (!character) {
+        throw new Error("Character not found")
+      }
+
+      const response = await fetch("/api/prompts/batch-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          character,
+          count: generatePromptsCount,
+          apiKey: geminiApiKey,
+        }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: `${generatePromptsCount} new prompts generated successfully.`,
+        })
+        loadPrompts()
+        setIsGeneratingPrompts(false)
+      } else {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to generate prompts")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to generate prompts",
         variant: "destructive",
       })
     } finally {
@@ -826,7 +879,7 @@ export default function AutomationDashboard() {
     }
   }
 
-  const trainLora = async (characterId: string) => {
+  const trainLora = async (characterId: string, baseModel: string) => {
     const character = characters.find((c) => c.id === characterId)
     if (!character) return
 
@@ -838,7 +891,7 @@ export default function AutomationDashboard() {
         body: JSON.stringify({
           characterId,
           characterName: character.name,
-          baseModel: character.preferredModel,
+          baseModel: baseModel,
           triggerWord: character.triggerWord,
           steps: 1000,
           learningRate: 1e-4,
@@ -1803,6 +1856,21 @@ export default function AutomationDashboard() {
                         }}
                       />
                     </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="base-model">Base Model</Label>
+                      <Select value={loraTrainingBaseModel} onValueChange={setLoraTrainingBaseModel}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a base model" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableModels.map((model) => (
+                            <SelectItem key={model.id} value={model.name}>
+                              {model.name.replace(".safetensors", "").replace(".ckpt", "")}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     {trainingImages.length > 0 && (
                       <div className="grid grid-cols-4 gap-2">
                         {trainingImages.map((image, index) => (
@@ -1811,7 +1879,7 @@ export default function AutomationDashboard() {
                       </div>
                     )}
                   </div>
-                  <Button onClick={() => trainLora(loraTrainingCharacter.id)} disabled={isLoading || trainingImages.length === 0}>
+                  <Button onClick={() => trainLora(loraTrainingCharacter.id, loraTrainingBaseModel)} disabled={isLoading || trainingImages.length === 0 || !loraTrainingBaseModel}>
                     {isLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : "Start Training"}
                   </Button>
                 </DialogContent>
@@ -2310,14 +2378,62 @@ export default function AutomationDashboard() {
           <TabsContent value="prompts" className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">Prompt Management</h2>
-              <Button onClick={loadPrompts} disabled={isLoading}>
-                {isLoading ? (
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                )}
-                Refresh Prompts
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={loadPrompts} disabled={isLoading}>
+                  {isLoading ? (
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                  )}
+                  Refresh Prompts
+                </Button>
+                <Dialog open={isGeneratingPrompts} onOpenChange={setIsGeneratingPrompts}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline">
+                      <Brain className="w-4 h-4 mr-2" />
+                      Generate New Prompts
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Generate New Prompts</DialogTitle>
+                      <DialogDescription>
+                        Select a character and the number of prompts to generate.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="grid gap-2">
+                        <Label>Character</Label>
+                        <Select value={generatePromptsCharacterId} onValueChange={setGeneratePromptsCharacterId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a character" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {characters.map((char) => (
+                              <SelectItem key={char.id} value={char.id}>
+                                {char.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Number of Prompts</Label>
+                        <Input
+                          type="number"
+                          value={generatePromptsCount}
+                          onChange={(e) => setGeneratePromptsCount(parseInt(e.target.value))}
+                          min="1"
+                          max="50"
+                        />
+                      </div>
+                    </div>
+                    <Button onClick={generateNewPrompts} disabled={isLoading || !generatePromptsCharacterId}>
+                      {isLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : "Generate"}
+                    </Button>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </div>
 
             <Card>
