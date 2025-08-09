@@ -23,14 +23,15 @@ interface InstagramPostRequest {
   characterId: string
   imageUrl: string
   caption: string
+  contentId: string
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { characterId, imageUrl, caption }: InstagramPostRequest = await request.json()
+    const { characterId, imageUrl, caption, contentId }: InstagramPostRequest = await request.json()
 
-    if (!characterId || !imageUrl || !caption) {
-      return NextResponse.json({ error: "characterId, imageUrl, and caption are required" }, { status: 400 })
+    if (!characterId || !imageUrl || !caption || !contentId) {
+      return NextResponse.json({ error: "characterId, imageUrl, caption and contentId are required" }, { status: 400 })
     }
 
     const characters = await loadCharacters()
@@ -79,6 +80,14 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("✅ Post published successfully, post_id:", publishResponse.postId)
+
+    // Update the content file
+    const content = await getContent()
+    const contentIndex = content.findIndex((c: any) => c.id === contentId)
+    if (contentIndex !== -1) {
+      content[contentIndex].postedToInstagram = true
+      await saveContent(content)
+    }
 
     return NextResponse.json({
       success: true,

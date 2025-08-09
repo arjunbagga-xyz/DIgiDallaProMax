@@ -157,6 +157,17 @@ interface GeneratedPrompt {
   used: boolean
 }
 
+interface Content {
+  id: string
+  characterId: string
+  prompt: string
+  imageUrl: string
+  caption: string
+  createdAt: string
+  postedToInstagram: boolean
+  postedToTwitter: boolean
+}
+
 export default function AutomationDashboard() {
   const [characters, setCharacters] = useState<Character[]>([])
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({
@@ -217,7 +228,6 @@ export default function AutomationDashboard() {
       postToInstagram: true,
     },
   })
-  const [editingCharacter, setEditingCharacter] = useState<Character | null>(null)
   const [deploymentStatus, setDeploymentStatus] = useState<{ [key: string]: any }>({})
   const [loraTrainingCharacter, setLoraTrainingCharacter] = useState<Character | null>(null)
   const [loraTrainingBaseModel, setLoraTrainingBaseModel] = useState<string>("")
@@ -229,6 +239,7 @@ export default function AutomationDashboard() {
   const [isGeneratingPrompts, setIsGeneratingPrompts] = useState(false)
   const [generatePromptsCharacterId, setGeneratePromptsCharacterId] = useState<string>("")
   const [generatePromptsCount, setGeneratePromptsCount] = useState<number>(10)
+  const [allContent, setAllContent] = useState<Content[]>([])
 
   useEffect(() => {
     const storedApiKey = localStorage.getItem("geminiApiKey")
@@ -267,7 +278,20 @@ export default function AutomationDashboard() {
       loadTrainings(),
       loadPrompts(),
       loadAvailableModels(),
+      loadContent(),
     ])
+  }
+
+  const loadContent = async () => {
+    try {
+      const response = await fetch("/api/content")
+      if (response.ok) {
+        const data = await response.json()
+        setAllContent(data.content || [])
+      }
+    } catch (error) {
+      console.error("Failed to load content:", error)
+    }
   }
 
   const checkSystemStatus = async () => {
@@ -514,12 +538,12 @@ export default function AutomationDashboard() {
     }
   }
 
-  const postToTwitter = async (characterId: string) => {
-    const content = generatedContent[characterId]
+  const postToTwitter = async (contentId: string) => {
+    const content = allContent.find((c) => c.id === contentId)
     if (!content) {
       toast({
         title: "Error",
-        description: "Please generate content first.",
+        description: "Content not found.",
         variant: "destructive",
       })
       return
@@ -702,12 +726,42 @@ export default function AutomationDashboard() {
     }
   }
 
-  const generateAndPost = async (characterId: string) => {
-    const content = generatedContent[characterId]
+  const deleteContent = async (contentId: string) => {
+    setIsLoading(true)
+    try {
+      const response = await fetch("/api/content", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: contentId }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Content deleted successfully.",
+        })
+        loadContent()
+      } else {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to delete content")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete content",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const generateAndPost = async (contentId: string) => {
+    const content = allContent.find((c) => c.id === contentId)
     if (!content) {
       toast({
         title: "Error",
-        description: "Please generate content first.",
+        description: "Content not found.",
         variant: "destructive",
       })
       return
@@ -782,33 +836,36 @@ export default function AutomationDashboard() {
   }
 
   const updateCharacter = async (characterId: string, updates: Partial<Character>) => {
-    setIsLoading(true)
+    const character = characters.find((c) => c.id === characterId)
+    if (!character) return
+
+    const updatedCharacter = { ...character, ...updates }
+
+    // Optimistically update the UI
+    const newCharacters = characters.map((c) => (c.id === characterId ? updatedCharacter : c))
+    setCharacters(newCharacters)
+
     try {
       const response = await fetch("/api/characters", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: characterId, ...updates }),
+        body: JSON.stringify(updatedCharacter),
       })
 
-      if (response.ok) {
-        toast({
-          title: "Success",
-          description: "Character updated successfully",
-        })
-        loadCharacters()
-        setEditingCharacter(null)
-      } else {
+      if (!response.ok) {
+        // Revert on failure
+        setCharacters(characters)
         const error = await response.json()
         throw new Error(error.error || "Failed to update character")
       }
     } catch (error) {
+      // Revert on failure
+      setCharacters(characters)
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to update character",
         variant: "destructive",
       })
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -1148,10 +1205,10 @@ export default function AutomationDashboard() {
         <Tabs defaultValue="characters" className="space-y-4">
           <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="characters">Characters</TabsTrigger>
+            <TabsTrigger value="content">Content</TabsTrigger>
             <TabsTrigger value="models">Models & LoRA</TabsTrigger>
             <TabsTrigger value="scheduling">Scheduling</TabsTrigger>
             <TabsTrigger value="deployment">Deployment</TabsTrigger>
-            <TabsTrigger value="prompts">Prompts</TabsTrigger>
             <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
@@ -1453,9 +1510,6 @@ export default function AutomationDashboard() {
                         {character.name}
                       </div>
                       <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => setEditingCharacter(character)}>
-                          <Edit className="w-4 h-4" />
-                        </Button>
                         <Button
                           size="sm"
                           variant="ghost"
@@ -1557,262 +1611,6 @@ export default function AutomationDashboard() {
                 </Card>
               ))}
             </div>
-
-            {editingCharacter && (
-              <Dialog open={!!editingCharacter} onOpenChange={() => setEditingCharacter(null)}>
-                <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>Edit Character</DialogTitle>
-                    <DialogDescription>
-                      Update the details for {editingCharacter.name}.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="edit-name">Character Name</Label>
-                        <Input
-                          id="edit-name"
-                          value={editingCharacter.name}
-                          onChange={(e) => setEditingCharacter({ ...editingCharacter, name: e.target.value })}
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="edit-triggerWord">Trigger Word</Label>
-                        <Input
-                          id="edit-triggerWord"
-                          value={editingCharacter.triggerWord}
-                          onChange={(e) => setEditingCharacter({ ...editingCharacter, triggerWord: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="edit-personality">Personality</Label>
-                      <Input
-                        id="edit-personality"
-                        value={editingCharacter.personality}
-                        onChange={(e) => setEditingCharacter({ ...editingCharacter, personality: e.target.value })}
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="edit-backstory">Backstory</Label>
-                      <Textarea
-                        id="edit-backstory"
-                        value={editingCharacter.backstory}
-                        onChange={(e) => setEditingCharacter({ ...editingCharacter, backstory: e.target.value })}
-                        rows={3}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="grid gap-2">
-                          <Label htmlFor="instagram">Instagram Handle</Label>
-                          <Input
-                            id="instagram"
-                            value={editingCharacter.instagramHandle}
-                            onChange={(e) => setEditingCharacter({ ...editingCharacter, instagramHandle: e.target.value })}
-                            placeholder="@character_handle"
-                          />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="preferredModel">Preferred Model</Label>
-                          <Select
-                            value={editingCharacter.preferredModel}
-                            onValueChange={(value) => setEditingCharacter({ ...editingCharacter, preferredModel: value })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select model" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {availableModels.map((model) => (
-                                <SelectItem key={model.id} value={model.name}>
-                                  {model.name.replace(".safetensors", "").replace(".ckpt", "")}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <div className="space-y-4 border-t pt-4">
-                        <h4 className="font-medium">API Keys</h4>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="grid gap-2">
-                            <Label htmlFor="edit-instagram-account-id">Instagram Account ID</Label>
-                            <Input
-                              id="edit-instagram-account-id"
-                              value={editingCharacter.instagramAccountId}
-                              onChange={(e) => setEditingCharacter({ ...editingCharacter, instagramAccountId: e.target.value })}
-                              placeholder="Enter Instagram Account ID"
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label htmlFor="edit-instagram-api-key">Instagram API Key</Label>
-                            <Input
-                              id="edit-instagram-api-key"
-                              type="password"
-                              value={editingCharacter.instagramApiKey}
-                              onChange={(e) => setEditingCharacter({ ...editingCharacter, instagramApiKey: e.target.value })}
-                              placeholder="Enter Instagram API Key"
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label htmlFor="edit-twitter-account-id">X/Twitter Account ID</Label>
-                            <Input
-                              id="edit-twitter-account-id"
-                              value={editingCharacter.twitterAccountId}
-                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAccountId: e.target.value })}
-                              placeholder="Enter X/Twitter Account ID"
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label htmlFor="edit-twitter-app-key">X/Twitter App Key</Label>
-                            <Input
-                              id="edit-twitter-app-key"
-                              value={editingCharacter.twitterAppKey}
-                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAppKey: e.target.value })}
-                              placeholder="Enter X/Twitter App Key"
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label htmlFor="edit-twitter-app-secret">X/Twitter App Secret</Label>
-                            <Input
-                              id="edit-twitter-app-secret"
-                              type="password"
-                              value={editingCharacter.twitterAppSecret}
-                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAppSecret: e.target.value })}
-                              placeholder="Enter X/Twitter App Secret"
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label htmlFor="edit-twitter-access-token">X/Twitter Access Token</Label>
-                            <Input
-                              id="edit-twitter-access-token"
-                              type="password"
-                              value={editingCharacter.twitterAccessToken}
-                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAccessToken: e.target.value })}
-                              placeholder="Enter X/Twitter Access Token"
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label htmlFor="edit-twitter-access-secret">X/Twitter Access Secret</Label>
-                            <Input
-                              id="edit-twitter-access-secret"
-                              type="password"
-                              value={editingCharacter.twitterAccessSecret}
-                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAccessSecret: e.target.value })}
-                              placeholder="Enter X/Twitter Access Secret"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="space-y-4 border-t pt-4">
-                        <h4 className="font-medium">Prompt Settings</h4>
-                        <div className="grid gap-2">
-                          <Label htmlFor="edit-basePrompt">Base Prompt</Label>
-                          <Textarea
-                            id="edit-basePrompt"
-                            value={editingCharacter.promptSettings?.basePrompt}
-                            onChange={(e) =>
-                              setEditingCharacter({
-                                ...editingCharacter,
-                                promptSettings: { ...editingCharacter.promptSettings, basePrompt: e.target.value },
-                              })
-                            }
-                            placeholder="Base prompt for image generation..."
-                            rows={2}
-                          />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="edit-negativePrompt">Negative Prompt</Label>
-                          <Textarea
-                            id="edit-negativePrompt"
-                            value={editingCharacter.promptSettings?.negativePrompt}
-                            onChange={(e) =>
-                              setEditingCharacter({
-                                ...editingCharacter,
-                                promptSettings: { ...editingCharacter.promptSettings, negativePrompt: e.target.value },
-                              })
-                            }
-                            placeholder="What to avoid in generation..."
-                            rows={2}
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="grid gap-2">
-                            <Label htmlFor="edit-style">Style</Label>
-                            <Input
-                              id="edit-style"
-                              value={editingCharacter.promptSettings?.style}
-                              onChange={(e) =>
-                                setEditingCharacter({
-                                  ...editingCharacter,
-                                  promptSettings: { ...editingCharacter.promptSettings, style: e.target.value },
-                                })
-                              }
-                              placeholder="e.g., photorealistic, artistic"
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label htmlFor="edit-mood">Mood</Label>
-                            <Input
-                              id="edit-mood"
-                              value={editingCharacter.promptSettings?.mood}
-                              onChange={(e) =>
-                                setEditingCharacter({
-                                  ...editingCharacter,
-                                  promptSettings: { ...editingCharacter.promptSettings, mood: e.target.value },
-                                })
-                              }
-                              placeholder="e.g., serene, dramatic"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="space-y-4 border-t pt-4">
-                        <h4 className="font-medium">Narratives</h4>
-                        {editingCharacter.narratives?.map((narrative, index) => (
-                          <div key={narrative.id} className="space-y-2 border p-2 rounded-md">
-                            <Input value={narrative.title} placeholder="Title" onChange={(e) => {
-                              const newNarratives = [...editingCharacter.narratives || []]
-                              newNarratives[index].title = e.target.value
-                              setEditingCharacter({ ...editingCharacter, narratives: newNarratives })
-                            }} />
-                            <Textarea value={narrative.description} placeholder="Description" onChange={(e) => {
-                              const newNarratives = [...editingCharacter.narratives || []]
-                              newNarratives[index].description = e.target.value
-                              setEditingCharacter({ ...editingCharacter, narratives: newNarratives })
-                            }} />
-                            <div className="flex gap-2">
-                              <Input type="date" value={narrative.startDate} onChange={(e) => {
-                                const newNarratives = [...editingCharacter.narratives || []]
-                                newNarratives[index].startDate = e.target.value
-                                setEditingCharacter({ ...editingCharacter, narratives: newNarratives })
-                              }} />
-                              <Input type="date" value={narrative.endDate} onChange={(e) => {
-                                const newNarratives = [...editingCharacter.narratives || []]
-                                newNarratives[index].endDate = e.target.value
-                                setEditingCharacter({ ...editingCharacter, narratives: newNarratives })
-                              }} />
-                            </div>
-                            <Button size="sm" variant="destructive" onClick={() => {
-                              const newNarratives = [...editingCharacter.narratives || []]
-                              newNarratives.splice(index, 1)
-                              setEditingCharacter({ ...editingCharacter, narratives: newNarratives })
-                            }}>Remove</Button>
-                          </div>
-                        ))}
-                        <Button size="sm" onClick={() => {
-                          const newNarratives = [...editingCharacter.narratives || []]
-                          newNarratives.push({ id: `narrative_${Date.now()}`, title: "", description: "", startDate: "", endDate: "" })
-                          setEditingCharacter({ ...editingCharacter, narratives: newNarratives })
-                        }}>Add Narrative</Button>
-                      </div>
-                  </div>
-                  <Button onClick={() => updateCharacter(editingCharacter.id, editingCharacter)} disabled={isLoading}>
-                    {isLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : "Save Changes"}
-                  </Button>
-                </DialogContent>
-              </Dialog>
-            )}
 
             {loraTrainingCharacter && (
               <Dialog open={!!loraTrainingCharacter} onOpenChange={() => {
@@ -2393,251 +2191,235 @@ export default function AutomationDashboard() {
             </div>
           </TabsContent>
 
-          <TabsContent value="prompts" className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Prompt Management</h2>
-              <div className="flex gap-2">
-                <Button onClick={loadPrompts} disabled={isLoading}>
-                  {isLoading ? (
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                  )}
-                  Refresh Prompts
-                </Button>
-                <Dialog open={isGeneratingPrompts} onOpenChange={setIsGeneratingPrompts}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline">
-                      <Brain className="w-4 h-4 mr-2" />
-                      Generate New Prompts
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Generate New Prompts</DialogTitle>
-                      <DialogDescription>
-                        Select a character and the number of prompts to generate.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                      <div className="grid gap-2">
-                        <Label>Character</Label>
-                        <Select value={generatePromptsCharacterId} onValueChange={setGeneratePromptsCharacterId}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a character" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {characters.map((char) => (
-                              <SelectItem key={char.id} value={char.id}>
-                                {char.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label>Number of Prompts</Label>
-                        <Input
-                          type="number"
-                          value={generatePromptsCount}
-                          onChange={(e) => setGeneratePromptsCount(parseInt(e.target.value))}
-                          min="1"
-                          max="50"
-                        />
-                      </div>
-                    </div>
-                    <Button onClick={generateNewPrompts} disabled={isLoading || !generatePromptsCharacterId}>
-                      {isLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : "Generate"}
-                    </Button>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Prompts</CardTitle>
-                <CardDescription>AI-generated prompts for your characters</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-4">
-                  <Input
-                    placeholder="Search prompts..."
-                    value={promptSearchTerm}
-                    onChange={(e) => setPromptSearchTerm(e.target.value)}
-                    className="max-w-sm"
-                  />
-                  {selectedPrompts.length > 0 && (
-                    <Button
-                      variant="destructive"
-                      onClick={() => {
-                        if (confirm(`Are you sure you want to delete ${selectedPrompts.length} prompts?`)) {
-                          deleteSelectedPrompts()
-                        }
-                      }}
-                    >
-                      Delete Selected ({selectedPrompts.length})
-                    </Button>
-                  )}
-                </div>
-                {prompts.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>
-                          <Checkbox
-                            checked={selectedPrompts.length === prompts.filter((prompt) => prompt.prompt.toLowerCase().includes(promptSearchTerm.toLowerCase())).slice(0, 10).length && prompts.length > 0}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setSelectedPrompts(prompts.filter((prompt) => prompt.prompt.toLowerCase().includes(promptSearchTerm.toLowerCase())).slice(0, 10).map(p => p.id))
-                              } else {
-                                setSelectedPrompts([])
-                              }
-                            }}
-                          />
-                        </TableHead>
-                        <TableHead>Character</TableHead>
-                        <TableHead>Prompt</TableHead>
-                        <TableHead>Generated</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {prompts
-                        .filter((prompt) =>
-                          prompt.prompt.toLowerCase().includes(promptSearchTerm.toLowerCase())
-                        )
-                        .slice(0, 10)
-                        .map((prompt) => (
-                        <Collapsible key={prompt.id} asChild>
-                          <>
-                            <TableRow>
-                              <TableCell>
-                                <Checkbox
-                                  checked={selectedPrompts.includes(prompt.id)}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      setSelectedPrompts([...selectedPrompts, prompt.id])
-                                    } else {
-                                      setSelectedPrompts(selectedPrompts.filter(id => id !== prompt.id))
-                                    }
-                                  }}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-2">
-                                  <img src={prompt.characterAvatar || "/placeholder-user.jpg"} alt={prompt.characterName} className="w-8 h-8 rounded-full" />
-                                  {prompt.characterName}
-                                </div>
-                              </TableCell>
-                              <TableCell className="max-w-xs">
-                                <div className="truncate" title={prompt.prompt}>
-                                  {prompt.prompt}
-                                </div>
-                              </TableCell>
-                              <TableCell>{new Date(prompt.createdAt).toLocaleDateString()}</TableCell>
-                              <TableCell>
-                                <Badge variant={prompt.used ? "default" : "secondary"}>
-                                  {prompt.used ? "Used" : "Available"}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex gap-1 justify-end">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(prompt.prompt)
-                                      toast({ title: "Copied", description: "Prompt copied to clipboard" })
+          <TabsContent value="content" className="space-y-4">
+            <h2 className="text-2xl font-bold">Content Management</h2>
+            <Accordion type="single" collapsible className="w-full">
+              {characters.map((character) => (
+                <AccordionItem key={character.id} value={character.id}>
+                  <AccordionTrigger>{character.name}</AccordionTrigger>
+                  <AccordionContent>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-4">
+                        <h3 className="font-bold mb-2">Generated Content</h3>
+                        <Button onClick={() => generateContent(character.id)} disabled={isLoading}>
+                          <Brain className="w-4 h-4 mr-2" />
+                          Generate More Content
+                        </Button>
+                        <div className="grid grid-cols-2 gap-4">
+                          {allContent
+                            .filter((c) => c.characterId === character.id)
+                            .map((contentItem) => (
+                              <Card key={contentItem.id}>
+                                <CardContent className="p-4">
+                                  <img
+                                    src={contentItem.imageUrl}
+                                    alt="Generated content"
+                                    className="rounded-md mb-2"
+                                  />
+                                  <Textarea
+                                    value={contentItem.caption}
+                                    onChange={(e) => {
+                                      const newAllContent = allContent.map((c) =>
+                                        c.id === contentItem.id ? { ...c, caption: e.target.value } : c
+                                      )
+                                      setAllContent(newAllContent)
                                     }}
-                                  >
-                                    <Copy className="w-4 h-4" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={async () => {
-                                      setIsLoading(true)
-                                      await generateImage(prompt.characterId)
-                                      setIsLoading(false)
-                                    }}
-                                  >
-                                    <ImageIcon className="w-4 h-4" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="text-red-500 hover:text-red-700"
-                                    onClick={() => {
-                                      if (confirm("Are you sure you want to delete this prompt?")) {
-                                        deletePrompt(prompt.id)
-                                      }
-                                    }}
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                  <CollapsibleTrigger asChild>
-                                    <Button variant="ghost" size="sm">
-                                      <ChevronDown className="h-4 w-4" />
-                                      <span className="sr-only">Toggle</span>
-                                    </Button>
-                                  </CollapsibleTrigger>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                            <CollapsibleContent asChild>
-                              <TableRow>
-                                <TableCell colSpan={5} className="p-4 bg-gray-50">
-                                  <div className="space-y-4">
-                                    <div>
-                                      <h4 className="font-semibold">Backstory</h4>
-                                      <p className="text-sm text-gray-600">{prompt.characterBackstory || "No backstory available."}</p>
-                                      <Button size="sm" variant="outline" onClick={() => setEditingCharacter(characters.find(c => c.id === prompt.characterId) || null)} className="mt-2">
-                                        <Edit className="w-4 h-4 mr-2" />
-                                        Edit Character & Narratives
+                                    className="text-sm"
+                                  />
+                                  <div className="flex justify-between items-center mt-2">
+                                    <div className="flex gap-2">
+                                      <Badge variant={contentItem.postedToInstagram ? "default" : "secondary"}>
+                                        Instagram
+                                      </Badge>
+                                      <Badge variant={contentItem.postedToTwitter ? "default" : "secondary"}>
+                                        X/Twitter
+                                      </Badge>
+                                    </div>
+                                    <div className="flex gap-1">
+                                      <Button size="sm" variant="outline" onClick={() => generateAndPost(contentItem.id)}>
+                                        <Instagram className="w-4 h-4" />
                                       </Button>
-                                    </div>
-                                    <div>
-                                      <h4 className="font-semibold">Current Narrative</h4>
-                                      <p className="text-sm text-gray-600">
-                                        {characters.find(c => c.id === prompt.characterId)?.narratives?.find(n => {
-                                          const now = new Date()
-                                          const start = new Date(n.startDate)
-                                          const end = new Date(n.endDate)
-                                          return now >= start && now <= end
-                                        })?.title || "No active narrative."}
-                                      </p>
-                                    </div>
-                                    <div className="space-y-2">
-                                      <h4 className="font-semibold">Generated Caption</h4>
-                                      <Textarea
-                                        value={promptCaptions[prompt.id] || prompt.caption || ""}
-                                        onChange={(e) => setPromptCaptions({ ...promptCaptions, [prompt.id]: e.target.value })}
-                                        placeholder="Generate a caption or write your own..."
-                                        rows={3}
-                                      />
-                                      <Button size="sm" onClick={() => generateCaption(prompt.id, prompt.characterId)} disabled={isLoading}>
-                                        {isLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Brain className="w-4 h-4 mr-2" />}
-                                        Generate with AI
+                                      <Button size="sm" variant="outline" onClick={() => postToTwitter(contentItem.id)}>
+                                        <Zap className="w-4 h-4" />
+                                      </Button>
+                                      <Button size="sm" variant="destructive" onClick={() => deleteContent(contentItem.id)}>
+                                        <Trash2 className="w-4 h-4" />
                                       </Button>
                                     </div>
                                   </div>
-                                </TableCell>
-                              </TableRow>
-                            </CollapsibleContent>
-                          </>
-                        </Collapsible>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <div className="text-sm text-gray-600">
-                    No prompts generated yet. Create a character and generate prompts to see them here.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                                </CardContent>
+                              </Card>
+                            ))}
+                        </div>
+                      </div>
+                      <div>
+                        <h3 className="font-bold mb-2">Character Settings</h3>
+                        <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="edit-name">Character Name</Label>
+                        <Input
+                          id="edit-name"
+                          value={character.name}
+                          onChange={(e) => updateCharacter(character.id, { name: e.target.value })}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="edit-triggerWord">Trigger Word</Label>
+                        <Input
+                          id="edit-triggerWord"
+                          value={character.triggerWord}
+                          onChange={(e) => updateCharacter(character.id, { triggerWord: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-personality">Personality</Label>
+                      <Input
+                        id="edit-personality"
+                        value={character.personality}
+                        onChange={(e) => updateCharacter(character.id, { personality: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-backstory">Backstory</Label>
+                      <Textarea
+                        id="edit-backstory"
+                        value={character.backstory}
+                        onChange={(e) => updateCharacter(character.id, { backstory: e.target.value })}
+                        rows={3}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="instagram">Instagram Handle</Label>
+                          <Input
+                            id="instagram"
+                            value={character.instagramHandle}
+                            onChange={(e) => updateCharacter(character.id, { instagramHandle: e.target.value })}
+                            placeholder="@character_handle"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="preferredModel">Preferred Model</Label>
+                          <Select
+                            value={character.preferredModel}
+                            onValueChange={(value) => updateCharacter(character.id, { preferredModel: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select model" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableModels.map((model) => (
+                                <SelectItem key={model.id} value={model.name}>
+                                  {model.name.replace(".safetensors", "").replace(".ckpt", "")}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="space-y-4 border-t pt-4">
+                        <h4 className="font-medium">API Keys</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-instagram-account-id">Instagram Account ID</Label>
+                            <Input
+                              id="edit-instagram-account-id"
+                              value={character.instagramAccountId}
+                              onChange={(e) => updateCharacter(character.id, { instagramAccountId: e.target.value })}
+                              placeholder="Enter Instagram Account ID"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-instagram-api-key">Instagram API Key</Label>
+                            <Input
+                              id="edit-instagram-api-key"
+                              type="password"
+                              value={character.instagramApiKey}
+                              onChange={(e) => updateCharacter(character.id, { instagramApiKey: e.target.value })}
+                              placeholder="Enter Instagram API Key"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-twitter-account-id">X/Twitter Account ID</Label>
+                            <Input
+                              id="edit-twitter-account-id"
+                              value={character.twitterAccountId}
+                              onChange={(e) => updateCharacter(character.id, { twitterAccountId: e.target.value })}
+                              placeholder="Enter X/Twitter Account ID"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-twitter-app-key">X/Twitter App Key</Label>
+                            <Input
+                              id="edit-twitter-app-key"
+                              value={character.twitterAppKey}
+                              onChange={(e) => updateCharacter(character.id, { twitterAppKey: e.target.value })}
+                              placeholder="Enter X/Twitter App Key"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-twitter-app-secret">X/Twitter App Secret</Label>
+                            <Input
+                              id="edit-twitter-app-secret"
+                              type="password"
+                              value={character.twitterAppSecret}
+                              onChange={(e) => updateCharacter(character.id, { twitterAppSecret: e.target.value })}
+                              placeholder="Enter X/Twitter App Secret"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-twitter-access-token">X/Twitter Access Token</Label>
+                            <Input
+                              id="edit-twitter-access-token"
+                              type="password"
+                              value={character.twitterAccessToken}
+                              onChange={(e) => updateCharacter(character.id, { twitterAccessToken: e.target.value })}
+                              placeholder="Enter X/Twitter Access Token"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-twitter-access-secret">X/Twitter Access Secret</Label>
+                            <Input
+                              id="edit-twitter-access-secret"
+                              type="password"
+                              value={character.twitterAccessSecret}
+                              onChange={(e) => updateCharacter(character.id, { twitterAccessSecret: e.target.value })}
+                              placeholder="Enter X/Twitter Access Secret"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-4 border-t pt-4">
+                        <h4 className="font-medium">Prompt Settings</h4>
+                        <div className="grid gap-2">
+                          <Label htmlFor="edit-basePrompt">Base Prompt</Label>
+                          <Textarea
+                            id="edit-basePrompt"
+                            value={character.promptSettings?.basePrompt}
+                            onChange={(e) => updateCharacter(character.id, { promptSettings: { ...character.promptSettings, basePrompt: e.target.value } })}
+                            placeholder="Base prompt for image generation..."
+                            rows={2}
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="edit-negativePrompt">Negative Prompt</Label>
+                          <Textarea
+                            id="edit-negativePrompt"
+                            value={character.promptSettings?.negativePrompt}
+                            onChange={(e) => updateCharacter(character.id, { promptSettings: { ...character.promptSettings, negativePrompt: e.target.value } })}
+                            placeholder="What to avoid in generation..."
+                            rows={2}
+                          />
+                        </div>
+                      </div>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
           </TabsContent>
 
           <TabsContent value="monitoring" className="space-y-4">

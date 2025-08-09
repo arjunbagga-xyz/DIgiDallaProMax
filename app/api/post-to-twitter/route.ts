@@ -22,12 +22,30 @@ async function loadCharacters(): Promise<Character[]> {
   }
 }
 
+const contentFilePath = path.join(process.cwd(), "data", "content.json")
+
+async function getContent() {
+  try {
+    const data = await fs.readFile(contentFilePath, "utf-8")
+    return JSON.parse(data)
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return []
+    }
+    throw error
+  }
+}
+
+async function saveContent(content: any) {
+  await fs.writeFile(contentFilePath, JSON.stringify(content, null, 2))
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { characterId, imageUrl, caption } = await request.json()
+    const { characterId, imageUrl, caption, contentId } = await request.json()
 
-    if (!characterId || !imageUrl || !caption) {
-      return NextResponse.json({ error: "Character ID, image URL, and caption are required" }, { status: 400 })
+    if (!characterId || !imageUrl || !caption || !contentId) {
+      return NextResponse.json({ error: "Character ID, image URL, caption and contentId are required" }, { status: 400 })
     }
 
     const characters = await loadCharacters()
@@ -63,6 +81,14 @@ export async function POST(request: NextRequest) {
         media_ids: [mediaId],
       },
     })
+
+    // Update the content file
+    const content = await getContent()
+    const contentIndex = content.findIndex((c: any) => c.id === contentId)
+    if (contentIndex !== -1) {
+      content[contentIndex].postedToTwitter = true
+      await saveContent(content)
+    }
 
     return NextResponse.json({ success: true, message: "Posted to X/Twitter successfully" })
   } catch (error) {
