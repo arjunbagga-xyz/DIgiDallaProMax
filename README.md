@@ -63,6 +63,16 @@ Open your browser and navigate to `http://localhost:3000`.
     - **Cron Parsing**: The cron expression parsing is **simplified**. It only supports daily schedules and simple intervals (e.g., `6h`, `30m`). Full cron syntax is not supported.
     - **Backup**: The backup functionality is a **placeholder** and does not perform any actual backups.
 
+## 🗃️ File-Based Database
+
+The application uses a simple file-based database system. All data is stored in JSON files in the `data/` directory.
+
+-   `data/characters.json`: Stores an array of character objects.
+-   `data/scheduler.json`: Stores an array of scheduled task objects.
+-   `data/prompts.json`: Stores an array of generated prompt objects.
+
+This approach is lightweight and easy to manage, but it's important to be aware of its limitations, especially in a production environment. For more details on the data structures, see the [Backend Workflows](BACKEND_WORKFLOWS.md) documentation.
+
 ## 🔧 Known Issues & Limitations
 
 - **Simulated Features**: As mentioned above, LoRA training, deployment, and parts of the scheduler are not fully implemented.

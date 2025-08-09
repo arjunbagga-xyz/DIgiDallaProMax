@@ -16,6 +16,8 @@
 
 ## 1. Instagram Graph API (Business/Creator Accounts)
 
+This application is designed to use the Instagram Graph API for posting content.
+
 ### Requirements:
 - ✅ Instagram Business or Creator account
 - ✅ Connected Facebook Page
@@ -37,24 +39,37 @@
 5. Get access tokens
 6. Submit for app review (if needed)
 
-## 2. Instagram Content Publishing API
+## 2. Storing Instagram Credentials
 
-### Requirements:
-- ✅ Instagram Business account
-- ✅ Facebook App approval
-- ✅ App Review required
-- ⚠️ Stricter rate limits
+Your Instagram credentials (API key and account ID) are stored securely within the `data/characters.json` file for each character. This allows the application to manage multiple characters with different Instagram accounts.
 
-## 3. Alternative Solutions (Recommended)
+**Example `character` object in `data/characters.json`:**
+
+```json
+{
+  "id": "char_1754528276811_4suaz8mqv",
+  "name": "Luna the Mystic",
+  "instagramHandle": "@luna_mystic",
+  "instagramAccountId": "1234567890",
+  "instagramApiKey": "YOUR_INSTAGRAM_API_KEY",
+  "...": "..."
+}
+```
+
+This design ensures that each character's posting capabilities are tied to their specific profile.
+
+## 3. Alternative Solutions
+
+If you are unable to use the Instagram Graph API, here are some alternative solutions:
 
 ### A. Manual Posting (Most Reliable)
-\`\`\`
+```
 ✅ Bot generates images
 ✅ Saves images locally
 ✅ You manually post to Instagram
 ✅ No API restrictions
 ✅ Better engagement control
-\`\`\`
+```
 
 ### B. Third-Party Services
 - **Buffer** - $5/month, supports Instagram posting
@@ -70,9 +85,10 @@
 
 ## 4. Recommended Zero-Cost Approach
 
-\`\`\`mermaid
+```mermaid
 graph TD
     A[Bot Generates Image] --> B[Saves to Local/Cloud Storage]
     B --> C[Notification Sent]
     C --> D[Manual Instagram Post]
     D --> E[Engagement & Analytics]
+```

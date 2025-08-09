@@ -20,7 +20,7 @@
 
 ### GitHub Actions Capacity Analysis:
 
-\`\`\`
+```
 📊 CAPACITY BREAKDOWN:
 - Free tier: 2000 minutes/month
 - Per generation: ~5 minutes average
@@ -34,19 +34,19 @@
 - Instagram posting: ~30 seconds
 - Cleanup & artifacts: ~30 seconds
 - Total: ~5 minutes average
-\`\`\`
+```
 
 ### Setup Steps:
 
 1. **Fork the repository**
 2. **Add GitHub Secrets:**
-   \`\`\`
+   ```
    HUGGINGFACE_TOKEN=your_token
    FLUX_MODEL=flux-dev
    INSTAGRAM_ACCESS_TOKEN=your_token
    INSTAGRAM_ACCOUNT_ID=your_account_id
    CHARACTER_LORA=your_lora_name (optional)
-   \`\`\`
+   ```
 3. **Enable GitHub Actions** in repository settings
 4. **Customize schedule** in `.github/workflows/instagram-bot.yml`
 5. **Deploy and monitor** via Actions tab
@@ -146,27 +146,6 @@
     -   Add arguments: `scripts/scheduler-daemon.js`.
     -   Set the "Start in" directory to the root of your project.
 
-## 🏆 Recommendation: GitHub Actions
-
-**For 99% of users, GitHub Actions is the best choice because:**
-
-1. **Zero Infrastructure:** No servers to manage
-2. **Generous Limits:** 400+ posts/month possible
-3. **Built-in Features:** Monitoring, logging, artifacts
-4. **Reliability:** Enterprise-grade uptime
-5. **Cost:** Completely free for typical usage
-6. **Scalability:** Automatically handles load
-
-## 📊 Cost Comparison
-
-| Platform | Monthly Cost | Compute Limit | Best For |
-|----------|-------------|---------------|----------|
-| **GitHub Actions** | **$0** | **2000 minutes** | **Most users** |
-| Vercel Functions | $0 | 100GB-hours | Web dashboards |
-| Local Cron | $0 | Unlimited | Power users |
-| AWS Lambda | ~$1-5 | Pay per use | Enterprise |
-| Google Cloud Run | ~$2-10 | Pay per use | Enterprise |
-
 ## 🐳 Alternative: Docker Deployment
 
 ### Pros:
@@ -218,12 +197,57 @@
 3.  **Run the Docker container:**
 
     ```bash
-    docker run -p 3000:3000 -d --name my-bot \\
-      -e HUGGINGFACE_TOKEN="your_token" \\
-      -e INSTAGRAM_ACCESS_TOKEN="your_token" \\
-      -e INSTAGRAM_ACCOUNT_ID="your_account_id" \\
+    docker run -p 3000:3000 -d --name my-bot \
+      -e HUGGINGFACE_TOKEN="your_token" \
+      -e INSTAGRAM_ACCESS_TOKEN="your_token" \
+      -e INSTAGRAM_ACCOUNT_ID="your_account_id" \
       instagram-ai-bot
     ```
+
+## 🗃️ Handling the `data` Directory in Deployment
+
+The `data` directory is the heart of your application's state, containing all your characters, schedules, and prompts in JSON files. It's crucial to handle this directory correctly during deployment to avoid data loss.
+
+### Local and Docker Deployments
+
+For local and Docker deployments, the `data` directory is stored on the host machine's filesystem.
+
+*   **Backup:** Regularly back up the `data` directory to a safe location. You can do this manually by copying the directory, or by using a script to automate the process.
+*   **Permissions:** Ensure that the user running the application has read and write permissions for the `data` directory and its contents.
+
+### GitHub Actions Deployment
+
+GitHub Actions provides a stateless environment, meaning that any changes to the filesystem are lost when the workflow finishes. To persist the data in the `data` directory, you need to use a different strategy.
+
+*   **Commit to Git:** The simplest approach is to commit the `data` directory to your Git repository. This way, the data is version-controlled and available to every workflow run.
+    *   **Pros:** Easy to set up, no external services needed.
+    *   **Cons:** The repository size will grow over time. Be mindful of storing sensitive data in a public repository.
+*   **External Storage:** For more advanced use cases, you can store the `data` directory in an external storage service like Amazon S3, Google Cloud Storage, or a database.
+    *   **Pros:** Scalable, keeps the repository clean.
+    *   **Cons:** More complex to set up, may incur costs.
+
+**Recommended approach for GitHub Actions:** For most users, committing the `data` directory to the repository is the most straightforward solution. If your application grows to a large scale, consider moving to an external storage service.
+
+## 🏆 Recommendation: GitHub Actions
+
+**For 99% of users, GitHub Actions is the best choice because:**
+
+1. **Zero Infrastructure:** No servers to manage
+2. **Generous Limits:** 400+ posts/month possible
+3. **Built-in Features:** Monitoring, logging, artifacts
+4. **Reliability:** Enterprise-grade uptime
+5. **Cost:** Completely free for typical usage
+6. **Scalability:** Automatically handles load
+
+## 📊 Cost Comparison
+
+| Platform | Monthly Cost | Compute Limit | Best For |
+|----------|-------------|---------------|----------|
+| **GitHub Actions** | **$0** | **2000 minutes** | **Most users** |
+| Vercel Functions | $0 | 100GB-hours | Web dashboards |
+| Local Cron | $0 | Unlimited | Power users |
+| AWS Lambda | ~$1-5 | Pay per use | Enterprise |
+| Google Cloud Run | ~$2-10 | Pay per use | Enterprise |
 
 ## ⚙️ Environment Variables
 

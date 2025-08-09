@@ -31,6 +31,14 @@ This guide will help you set up a completely free Instagram automation system us
    - ✅ Full control
    - ❌ Requires always-on computer
 
+### Database:
+
+**File-Based Database (`/data` directory)**
+- ✅ **Completely Free**: No database hosting costs.
+- ✅ **Simple**: Easy to view and edit your data directly.
+- ✅ **Portable**: Your data is just a folder in your project.
+- ✅ **Version Controlled**: If you commit the `data` directory to Git, your data is versioned and backed up with your code.
+
 ## 🚀 Quick Start (Hugging Face + GitHub Actions)
 
 ### Step 1: Get Hugging Face Token
@@ -65,20 +73,20 @@ This guide will help you set up a completely free Instagram automation system us
 ### Installation Steps:
 
 1. **Install ComfyUI**:
-   \`\`\`bash
+   ```bash
    git clone https://github.com/comfyanonymous/ComfyUI.git
    cd ComfyUI
    pip install -r requirements.txt
-   \`\`\`
+   ```
 
 2. **Download Flux.1-dev**:
    - Download from [Hugging Face](https://huggingface.co/black-forest-labs/FLUX.1-dev)
    - Place in `ComfyUI/models/checkpoints/`
 
 3. **Start ComfyUI**:
-   \`\`\`bash
+   ```bash
    python main.py --listen 0.0.0.0 --port 8188
-   \`\`\`
+   ```
 
 4. **Train Character LoRA** (Optional):
    - Use [Kohya SS](https://github.com/kohya-ss/sd-scripts)
@@ -105,15 +113,16 @@ This guide will help you set up a completely free Instagram automation system us
 | GitHub Actions | FREE | 2000 minutes/month |
 | Instagram API | FREE | Personal use only |
 | ComfyUI (Local) | FREE | Unlimited (electricity only) |
+| File-Based Database | FREE | Unlimited (your storage) |
 | **Total Monthly Cost** | **$0** | **Perfect for personal use** |
 
 ## 🔧 Customization
 
 ### Adding New Prompts:
-Edit `PROMPT_TEMPLATES` in `/app/api/generate-image/route.ts`
+Edit `PROMPT_TEMPLATES` in `/app/api/generate-image/route.ts` or add prompts through the UI.
 
 ### Changing Schedule:
-Modify the cron expression in `.github/workflows/instagram-bot.yml`
+Modify the cron expression in `.github/workflows/instagram-bot.yml` or edit the schedule in the UI.
 
 ### Character Consistency:
 1. Train a LoRA with 10-20 character images
@@ -151,6 +160,7 @@ Once you outgrow the free tiers:
 1. **Hugging Face Pro**: $9/month for more requests
 2. **Dedicated GPU Server**: $20-50/month
 3. **Instagram Business API**: May require verification
+4. **Database**: Move to a cloud database like Vercel Postgres or Supabase.
 
 But for personal use and experimentation, the free tier is perfect!
 
@@ -160,7 +170,7 @@ But for personal use and experimentation, the free tier is perfect!
 2. **Posting Schedule**: Don't over-post (3-4 times per day max)
 3. **Engagement**: Manually engage with comments and followers
 4. **Compliance**: Follow Instagram's terms of service
-5. **Backup**: Always save generated images locally
+5. **Backup**: Always save generated images locally and back up your `data` directory.
 
 ## 🌟 Success Tips
 

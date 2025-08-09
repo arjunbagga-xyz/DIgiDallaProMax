@@ -44,21 +44,21 @@ This system provides everything you requested: multiple characters, LoRA trainin
 ## 🚀 Quick Start
 
 ### 1. Clone and Install
-\`\`\`bash
+```bash
 git clone <repository>
 cd instagram-automation
 npm install
-\`\`\`
+```
 
 ### 2. Set Up Environment Variables
-Copy \`.env.example\` to \`.env.local\` and configure:
+Copy `.env.example` to `.env.local` and configure:
 - Gemini API key for prompt generation
 - Hugging Face token for image generation
 - Instagram Graph API credentials for each character
 - ComfyUI URL if running locally
 
 ### 3. Configure Characters
-Use the UI or edit \`data/characters.json\`:
+Use the UI or edit `data/characters.json`:
 - Add character profiles with backstories
 - Set up Instagram account credentials
 - Define posting schedules
@@ -74,28 +74,113 @@ Use the UI or edit \`data/characters.json\`:
 Choose your deployment strategy:
 
 **Local + Cloud Hybrid (Recommended):**
-\`\`\`bash
+```bash
 # Start local scheduler
 npm run start:scheduler
 
 # Deploy to GitHub Actions as backup
 npm run deploy:github
-\`\`\`
+```
 
 **Local Only:**
-\`\`\`bash
+```bash
 # Start ComfyUI
 python ComfyUI/main.py --listen 0.0.0.0 --port 8188
 
 # Start local scheduler
 npm run start:scheduler
-\`\`\`
+```
 
 **Cloud Only:**
-\`\`\`bash
+```bash
 # Deploy to GitHub Actions
 npm run deploy:github
-\`\`\`
+```
+
+## 🗃️ Database System
+
+The application uses a simple and effective file-based database system. All data is stored in JSON files within the `data/` directory. This approach is lightweight, easy to manage, and fits perfectly with the zero-cost deployment model.
+
+### `data/characters.json`
+
+This is the core database file, storing an array of character objects. Each object contains all the information needed to define a character, including their personality, API keys, and settings.
+
+**Example `character` object:**
+
+```json
+{
+  "id": "char_1754528276811_4suaz8mqv",
+  "name": "Luna the Mystic",
+  "personality": "Dreamy and mystical",
+  "backstory": "Luna is a mysterious character who lives in a hidden forest.",
+  "instagramHandle": "@luna_mystic",
+  "isActive": true,
+  "createdAt": "2025-08-07T00:57:56.811Z",
+  "updatedAt": "2025-08-08T10:30:00.000Z",
+  "preferredModel": "sdxl_dreamshaper.safetensors",
+  "triggerWord": "luna_character",
+  "promptSettings": {
+    "basePrompt": "a beautiful portrait of luna_character",
+    "negativePrompt": "ugly, disfigured",
+    "style": "artistic",
+    "mood": "serene"
+  },
+  "narratives": [
+    {
+      "id": "narr_1",
+      "title": "The Crystal Quest",
+      "description": "Luna is searching for a legendary crystal.",
+      "startDate": "2025-08-01",
+      "endDate": "2025-08-31"
+    }
+  ],
+  "instagramAccountId": "1234567890",
+  "instagramApiKey": "INSTAGRAM_API_KEY",
+  "twitterAccountId": "0987654321",
+  "twitterAppKey": "TWITTER_APP_KEY",
+  "twitterAppSecret": "TWITTER_APP_SECRET",
+  "twitterAccessToken": "TWITTER_ACCESS_TOKEN",
+  "twitterAccessSecret": "TWITTER_ACCESS_SECRET"
+}
+```
+
+### `data/scheduler.json`
+
+This file stores an array of scheduled task objects, defining what actions should be taken and when.
+
+**Example `task` object:**
+
+```json
+{
+  "id": "task_1",
+  "characterId": "char_1754528276811_4suaz8mqv",
+  "type": "generate_and_post",
+  "schedule": "0 18 * * *",
+  "active": true,
+  "config": {
+    "prompt": "luna_character in a magical forest",
+    "postToInstagram": true
+  }
+}
+```
+
+### `data/prompts.json`
+
+This file stores an array of generated prompt objects, which can be used for generating images and captions.
+
+**Example `prompt` object:**
+
+```json
+{
+  "id": "prompt_1",
+  "characterId": "char_1754528276811_4suaz8mqv",
+  "characterName": "Luna the Mystic",
+  "prompt": "a beautiful portrait of luna_character in a magical forest",
+  "caption": "Exploring the enchanted woods today! #magic #forest #luna",
+  "createdAt": "2025-08-08T11:00:00.000Z",
+  "used": false
+}
+```
 
 ## 📊 System Architecture
 
@@ -162,7 +247,7 @@ Each character includes:
 - **Resource Management**: Optimized for 2000 minute limit
 
 ### Schedule Examples
-\`\`\`yaml
+```yaml
 # Emma - Travel blogger (every 6 hours)
 schedule: "0 */6 * * *"
 
@@ -171,7 +256,7 @@ schedule: "0 2,10,18 * * *"
 
 # Alex - Urban photographer (twice daily)
 schedule: "0 9,18 * * *"
-\`\`\`
+```
 
 ## 🔧 LoRA Training
 
@@ -265,7 +350,7 @@ Each character needs:
 - **Data Recovery**: Restore from artifacts/backups
 
 This system provides everything you need for a sophisticated, multi-character Instagram automation with AI-generated content, character consistency, and robust scheduling. The hybrid local/cloud approach ensures reliability while keeping costs at zero.
-\`\`\`
+```
 
 This comprehensive system addresses all your requirements:
 
