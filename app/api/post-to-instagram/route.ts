@@ -5,6 +5,8 @@ import { join } from "path"
 interface Character {
   id: string
   name: string
+  instagramApiKey?: string
+  instagramAccountId?: string
 }
 
 async function loadCharacters(): Promise<Character[]> {
@@ -38,15 +40,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Character not found" }, { status: 404 })
     }
 
-    const characterNameUpper = character.name.toUpperCase().replace(/\s/g, "_")
-    const accessToken = process.env[`${characterNameUpper}_INSTAGRAM_ACCESS_TOKEN`]
-    const accountId = process.env[`${characterNameUpper}_INSTAGRAM_ACCOUNT_ID`]
+    const accessToken = character.instagramApiKey || process.env.INSTAGRAM_ACCESS_TOKEN
+    const accountId = character.instagramAccountId || process.env.INSTAGRAM_ACCOUNT_ID
 
     if (!accessToken || !accountId) {
       return NextResponse.json(
         {
           error: `Instagram credentials not configured for character: ${character.name}`,
-          details: `Please set ${characterNameUpper}_INSTAGRAM_ACCESS_TOKEN and ${characterNameUpper}_INSTAGRAM_ACCOUNT_ID environment variables.`,
+          details: `Please set the Instagram API Key and Account ID for this character, or set the global INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_ACCOUNT_ID environment variables.`,
         },
         { status: 400 },
       )

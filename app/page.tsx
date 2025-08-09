@@ -82,7 +82,11 @@ interface Character {
     endDate: string
   }[]
   instagramApiKey?: string
-  twitterApiKey?: string
+  instagramAccountId?: string
+  twitterAppKey?: string
+  twitterAppSecret?: string
+  twitterAccessToken?: string
+  twitterAccessSecret?: string
 }
 
 interface SystemStatus {
@@ -178,7 +182,11 @@ export default function AutomationDashboard() {
     preferredModel: "",
     triggerWord: "",
     instagramApiKey: "",
-    twitterApiKey: "",
+    instagramAccountId: "",
+    twitterAppKey: "",
+    twitterAppSecret: "",
+    twitterAccessToken: "",
+    twitterAccessSecret: "",
     promptSettings: {
       basePrompt: "",
       negativePrompt: "",
@@ -400,6 +408,36 @@ export default function AutomationDashboard() {
     }
   }
 
+  const runMissedTask = async (taskId: string, timestamp: string) => {
+    setIsLoading(true)
+    try {
+      const response = await fetch("/api/scheduler", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "run_missed_task", taskId, timestamp }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Missed task executed successfully.",
+        })
+        loadScheduledTasks()
+      } else {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to run missed task")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to run missed task",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const deleteSelectedPrompts = async () => {
     setIsLoading(true)
     try {
@@ -443,6 +481,7 @@ export default function AutomationDashboard() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+          characterId: characterId,
             imageBase64: generationResult.image,
             caption: caption,
           }),
@@ -1169,6 +1208,15 @@ export default function AutomationDashboard() {
                         <h4 className="font-medium">API Keys</h4>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="grid gap-2">
+                            <Label htmlFor="instagram-account-id">Instagram Account ID</Label>
+                            <Input
+                              id="instagram-account-id"
+                              value={newCharacter.instagramAccountId}
+                              onChange={(e) => setNewCharacter({ ...newCharacter, instagramAccountId: e.target.value })}
+                              placeholder="Enter Instagram Account ID"
+                            />
+                          </div>
+                          <div className="grid gap-2">
                             <Label htmlFor="instagram-api-key">Instagram API Key</Label>
                             <Input
                               id="instagram-api-key"
@@ -1179,13 +1227,42 @@ export default function AutomationDashboard() {
                             />
                           </div>
                           <div className="grid gap-2">
-                            <Label htmlFor="twitter-api-key">X/Twitter API Key</Label>
+                            <Label htmlFor="twitter-app-key">X/Twitter App Key</Label>
                             <Input
-                              id="twitter-api-key"
+                              id="twitter-app-key"
+                              value={newCharacter.twitterAppKey}
+                              onChange={(e) => setNewCharacter({ ...newCharacter, twitterAppKey: e.target.value })}
+                              placeholder="Enter X/Twitter App Key"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="twitter-app-secret">X/Twitter App Secret</Label>
+                            <Input
+                              id="twitter-app-secret"
                               type="password"
-                              value={newCharacter.twitterApiKey}
-                              onChange={(e) => setNewCharacter({ ...newCharacter, twitterApiKey: e.target.value })}
-                              placeholder="Enter X/Twitter API Key"
+                              value={newCharacter.twitterAppSecret}
+                              onChange={(e) => setNewCharacter({ ...newCharacter, twitterAppSecret: e.target.value })}
+                              placeholder="Enter X/Twitter App Secret"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="twitter-access-token">X/Twitter Access Token</Label>
+                            <Input
+                              id="twitter-access-token"
+                              type="password"
+                              value={newCharacter.twitterAccessToken}
+                              onChange={(e) => setNewCharacter({ ...newCharacter, twitterAccessToken: e.target.value })}
+                              placeholder="Enter X/Twitter Access Token"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="twitter-access-secret">X/Twitter Access Secret</Label>
+                            <Input
+                              id="twitter-access-secret"
+                              type="password"
+                              value={newCharacter.twitterAccessSecret}
+                              onChange={(e) => setNewCharacter({ ...newCharacter, twitterAccessSecret: e.target.value })}
+                              placeholder="Enter X/Twitter Access Secret"
                             />
                           </div>
                         </div>
@@ -1261,27 +1338,61 @@ export default function AutomationDashboard() {
                         <h4 className="font-medium">API Keys</h4>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="grid gap-2">
+                            <Label htmlFor="edit-instagram-account-id">Instagram Account ID</Label>
+                            <Input
+                              id="edit-instagram-account-id"
+                              value={editingCharacter.instagramAccountId}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, instagramAccountId: e.target.value })}
+                              placeholder="Enter Instagram Account ID"
+                            />
+                          </div>
+                          <div className="grid gap-2">
                             <Label htmlFor="edit-instagram-api-key">Instagram API Key</Label>
                             <Input
                               id="edit-instagram-api-key"
                               type="password"
-                              value={editingCharacter?.instagramApiKey || ''}
-                              onChange={(e) =>
-                                editingCharacter && setEditingCharacter({ ...editingCharacter, instagramApiKey: e.target.value })
-                              }
+                              value={editingCharacter.instagramApiKey}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, instagramApiKey: e.target.value })}
                               placeholder="Enter Instagram API Key"
                             />
                           </div>
                           <div className="grid gap-2">
-                            <Label htmlFor="edit-twitter-api-key">X/Twitter API Key</Label>
+                            <Label htmlFor="edit-twitter-app-key">X/Twitter App Key</Label>
                             <Input
-                              id="edit-twitter-api-key"
+                              id="edit-twitter-app-key"
+                              value={editingCharacter.twitterAppKey}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAppKey: e.target.value })}
+                              placeholder="Enter X/Twitter App Key"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-twitter-app-secret">X/Twitter App Secret</Label>
+                            <Input
+                              id="edit-twitter-app-secret"
                               type="password"
-                              value={editingCharacter?.twitterApiKey || ''}
-                              onChange={(e) =>
-                                editingCharacter && setEditingCharacter({ ...editingCharacter, twitterApiKey: e.target.value })
-                              }
-                              placeholder="Enter X/Twitter API Key"
+                              value={editingCharacter.twitterAppSecret}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAppSecret: e.target.value })}
+                              placeholder="Enter X/Twitter App Secret"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-twitter-access-token">X/Twitter Access Token</Label>
+                            <Input
+                              id="edit-twitter-access-token"
+                              type="password"
+                              value={editingCharacter.twitterAccessToken}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAccessToken: e.target.value })}
+                              placeholder="Enter X/Twitter Access Token"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-twitter-access-secret">X/Twitter Access Secret</Label>
+                            <Input
+                              id="edit-twitter-access-secret"
+                              type="password"
+                              value={editingCharacter.twitterAccessSecret}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterAccessSecret: e.target.value })}
+                              placeholder="Enter X/Twitter Access Secret"
                             />
                           </div>
                         </div>
@@ -1525,6 +1636,94 @@ export default function AutomationDashboard() {
                         </div>
                       </div>
                       <div className="space-y-4 border-t pt-4">
+                        <h4 className="font-medium">API Keys</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-instagram-api-key">Instagram API Key</Label>
+                            <Input
+                              id="edit-instagram-api-key"
+                              type="password"
+                              value={editingCharacter.instagramApiKey}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, instagramApiKey: e.target.value })}
+                              placeholder="Enter Instagram API Key"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-twitter-api-key">X/Twitter API Key</Label>
+                            <Input
+                              id="edit-twitter-api-key"
+                              type="password"
+                              value={editingCharacter.twitterApiKey}
+                              onChange={(e) => setEditingCharacter({ ...editingCharacter, twitterApiKey: e.target.value })}
+                              placeholder="Enter X/Twitter API Key"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-4 border-t pt-4">
+                        <h4 className="font-medium">Prompt Settings</h4>
+                        <div className="grid gap-2">
+                          <Label htmlFor="edit-basePrompt">Base Prompt</Label>
+                          <Textarea
+                            id="edit-basePrompt"
+                            value={editingCharacter.promptSettings?.basePrompt}
+                            onChange={(e) =>
+                              setEditingCharacter({
+                                ...editingCharacter,
+                                promptSettings: { ...editingCharacter.promptSettings, basePrompt: e.target.value },
+                              })
+                            }
+                            placeholder="Base prompt for image generation..."
+                            rows={2}
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="edit-negativePrompt">Negative Prompt</Label>
+                          <Textarea
+                            id="edit-negativePrompt"
+                            value={editingCharacter.promptSettings?.negativePrompt}
+                            onChange={(e) =>
+                              setEditingCharacter({
+                                ...editingCharacter,
+                                promptSettings: { ...editingCharacter.promptSettings, negativePrompt: e.target.value },
+                              })
+                            }
+                            placeholder="What to avoid in generation..."
+                            rows={2}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-style">Style</Label>
+                            <Input
+                              id="edit-style"
+                              value={editingCharacter.promptSettings?.style}
+                              onChange={(e) =>
+                                setEditingCharacter({
+                                  ...editingCharacter,
+                                  promptSettings: { ...editingCharacter.promptSettings, style: e.target.value },
+                                })
+                              }
+                              placeholder="e.g., photorealistic, artistic"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="edit-mood">Mood</Label>
+                            <Input
+                              id="edit-mood"
+                              value={editingCharacter.promptSettings?.mood}
+                              onChange={(e) =>
+                                setEditingCharacter({
+                                  ...editingCharacter,
+                                  promptSettings: { ...editingCharacter.promptSettings, mood: e.target.value },
+                                })
+                              }
+                              placeholder="e.g., serene, dramatic"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-4 border-t pt-4">
                         <h4 className="font-medium">Narratives</h4>
                         {editingCharacter.narratives?.map((narrative, index) => (
                           <div key={narrative.id} className="space-y-2 border p-2 rounded-md">
@@ -1748,6 +1947,41 @@ export default function AutomationDashboard() {
                 </ul>
                 <p>Supported file formats are <code className="bg-gray-100 p-1 rounded">.safetensors</code> and <code className="bg-gray-100 p-1 rounded">.ckpt</code> for checkpoints, and <code className="bg-gray-100 p-1 rounded">.safetensors</code> and <code className="bg-gray-100 p-1 rounded">.pt</code> for LoRAs.</p>
                 <p>After adding the files, click the "Refresh Models" button above to see them in the list.</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Missed Runs</CardTitle>
+                <CardDescription>Tasks that were scheduled to run but were missed.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Character</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Missed At</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {scheduledTasks.flatMap(task =>
+                      (task.missedRuns || []).map(missedRun => (
+                        <TableRow key={`${task.id}-${missedRun.timestamp}`}>
+                          <TableCell>{task.characterName}</TableCell>
+                          <TableCell>{task.type}</TableCell>
+                          <TableCell>{new Date(missedRun.timestamp).toLocaleString()}</TableCell>
+                          <TableCell>
+                            <Button size="sm" onClick={() => runMissedTask(task.id, missedRun.timestamp)} disabled={isLoading}>
+                              Run Now
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </CardContent>
             </Card>
           </TabsContent>

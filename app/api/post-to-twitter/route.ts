@@ -1,22 +1,50 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { TwitterApi } from "twitter-api-v2"
+import { readFile } from "fs/promises"
+import { join } from "path"
 
-const client = new TwitterApi({
-  appKey: process.env.TWITTER_API_KEY || "",
-  appSecret: process.env.TWITTER_API_KEY_SECRET || "",
-  accessToken: process.env.TWITTER_ACCESS_TOKEN || "",
-  accessSecret: process.env.TWITTER_ACCESS_TOKEN_SECRET || "",
-})
+interface Character {
+  id: string
+  name: string
+  twitterAppKey?: string
+  twitterAppSecret?: string
+  twitterAccessToken?: string
+  twitterAccessSecret?: string
+}
 
-const twitterClient = client.readWrite
+async function loadCharacters(): Promise<Character[]> {
+  try {
+    const data = await readFile(join(process.cwd(), "data", "characters.json"), "utf-8")
+    return JSON.parse(data)
+  } catch (error) {
+    console.error("Failed to load characters:", error)
+    return []
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const { imageBase64, caption } = await request.json()
+    const { characterId, imageBase64, caption } = await request.json()
 
-    if (!imageBase64 || !caption) {
-      return NextResponse.json({ error: "Image and caption are required" }, { status: 400 })
+    if (!characterId || !imageBase64 || !caption) {
+      return NextResponse.json({ error: "Character ID, image, and caption are required" }, { status: 400 })
     }
+
+    const characters = await loadCharacters()
+    const character = characters.find((c) => c.id === characterId)
+
+    if (!character) {
+      return NextResponse.json({ error: "Character not found" }, { status: 404 })
+    }
+
+    const client = new TwitterApi({
+      appKey: character.twitterAppKey || process.env.TWITTER_API_KEY || "",
+      appSecret: character.twitterAppSecret || process.env.TWITTER_API_KEY_SECRET || "",
+      accessToken: character.twitterAccessToken || process.env.TWITTER_ACCESS_TOKEN || "",
+      accessSecret: character.twitterAccessSecret || process.env.TWITTER_ACCESS_TOKEN_SECRET || "",
+    })
+
+    const twitterClient = client.readWrite
 
     // Upload image
     const imageBuffer = Buffer.from(imageBase64, "base64")

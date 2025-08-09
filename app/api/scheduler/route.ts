@@ -12,7 +12,7 @@ interface ScheduledTask {
   active: boolean
   lastRun?: string
   nextRun?: string
-  missedRuns?: string[]
+  missedRuns?: { timestamp: string; error?: string }[]
   config?: {
     fluxModel?: string
     postToInstagram?: boolean
@@ -183,6 +183,8 @@ export async function POST(request: NextRequest) {
         return await runSchedulerNow(body.taskId)
       case "check_missed":
         return await checkMissedRuns()
+      case "run_missed_task":
+        return await runMissedTask(body.taskId, body.timestamp)
       case "add_task":
         return await addScheduledTask(body.task)
       case "update_task":
@@ -430,29 +432,23 @@ async function checkMissedRuns() {
   for (const task of tasks) {
     if (!task.active) continue
 
-    const nextRun = new Date(task.nextRun || calculateNextRun(task.schedule, task.lastRun))
+    let nextRun = new Date(task.nextRun || calculateNextRun(task.schedule, task.lastRun))
 
-    if (nextRun <= now) {
-      try {
-        await executeTask(task)
-        task.lastRun = now.toISOString()
-        task.nextRun = calculateNextRun(task.schedule, task.lastRun)
-        missedCount++
-      } catch (error) {
-        console.error(`Failed to execute missed task ${task.id}:`, error)
+    while (nextRun <= now) {
+      if (!task.missedRuns) task.missedRuns = []
+      task.missedRuns.push({ timestamp: nextRun.toISOString() })
+      missedCount++
 
-        // Track missed runs
-        if (!task.missedRuns) task.missedRuns = []
-        task.missedRuns.push(now.toISOString())
-
-        // Disable task if too many missed runs
-        const settings = await loadSettings()
-        if (task.missedRuns.length >= settings.maxMissedRuns) {
-          task.active = false
-          console.log(`Disabled task ${task.id} due to ${task.missedRuns.length} missed runs`)
-        }
+      const settings = await loadSettings()
+      if (task.missedRuns.length >= settings.maxMissedRuns) {
+        task.active = false
+        console.log(`Disabled task ${task.id} due to ${task.missedRuns.length} missed runs`)
+        break
       }
+
+      nextRun = new Date(calculateNextRun(task.schedule, nextRun.toISOString()))
     }
+    task.nextRun = nextRun.toISOString()
   }
 
   if (missedCount > 0) {
@@ -462,8 +458,37 @@ async function checkMissedRuns() {
   return NextResponse.json({
     success: true,
     missedTasks: missedCount,
-    message: `Executed ${missedCount} missed tasks`,
+    message: `Logged ${missedCount} missed tasks`,
   })
+}
+
+async function runMissedTask(taskId: string, timestamp: string) {
+  const tasks = await loadSchedule()
+  const task = tasks.find((t) => t.id === taskId)
+
+  if (!task) {
+    throw new Error("Task not found")
+  }
+
+  const missedRunIndex = task.missedRuns?.findIndex(mr => mr.timestamp === timestamp)
+  if (missedRunIndex === undefined || missedRunIndex === -1) {
+    throw new Error("Missed run not found")
+  }
+
+  try {
+    const result = await executeTask(task)
+    // Remove from missed runs on success
+    task.missedRuns?.splice(missedRunIndex, 1)
+    await saveSchedule(tasks)
+    return NextResponse.json({ success: true, result })
+  } catch (error) {
+    // Log error on failure
+    if(task.missedRuns) {
+      task.missedRuns[missedRunIndex].error = error instanceof Error ? error.message : "Unknown error"
+    }
+    await saveSchedule(tasks)
+    throw error
+  }
 }
 
 async function addScheduledTask(taskData: Partial<ScheduledTask>) {
