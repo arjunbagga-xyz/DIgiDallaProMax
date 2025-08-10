@@ -84,7 +84,7 @@ async function generateWithComfyUI(prompt: string, character: Character): Promis
     },
     "4": {
       inputs: {
-        width: 1024,
+        width: 1366,
         height: 1024,
         batch_size: 1,
       },
