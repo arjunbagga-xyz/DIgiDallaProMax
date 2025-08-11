@@ -260,7 +260,7 @@ export function createSDXLWorkflow(modelName: string, prompt: string, config: Pa
 export function createSD15Workflow(modelName: string, prompt: string, config: Partial<WorkflowConfig> = {}): Workflow {
   const {
     negativePrompt = "low quality, blurry, distorted, bad anatomy",
-    width = 512,
+    width = 768,
     height = 512,
     steps = 25,
     cfg = 7.0,
@@ -270,6 +270,11 @@ export function createSD15Workflow(modelName: string, prompt: string, config: Pa
     sampler = "euler_a",
     scheduler = "normal",
   } = config
+
+  // Hires fix specific settings
+  const upscaleFactor = 2
+  const hiresDenoise = 0.4
+  const hiresSteps = 15
 
   const workflow: Workflow = {
     "1": {
@@ -319,7 +324,7 @@ export function createSD15Workflow(modelName: string, prompt: string, config: Pa
         cfg: cfg,
         sampler_name: sampler,
         scheduler: scheduler,
-        denoise: 1,
+        denoise: 1.0,
         model: ["1", 0],
         positive: ["2", 0],
         negative: ["3", 0],
@@ -327,13 +332,13 @@ export function createSD15Workflow(modelName: string, prompt: string, config: Pa
       },
       class_type: "KSampler",
       _meta: {
-        title: "KSampler",
+        title: "KSampler (Base Pass)",
       },
     },
     "6": {
       inputs: {
         vae: ["1", 2],
-        samples: ["5", 0],
+        samples: ["9", 0], // Connects to the output of the hires sampler
       },
       class_type: "VAEDecode",
       _meta: {
@@ -342,7 +347,7 @@ export function createSD15Workflow(modelName: string, prompt: string, config: Pa
     },
     "7": {
       inputs: {
-        filename_prefix: "sd15_generated",
+        filename_prefix: "sd15_generated_hires",
         images: ["6", 0],
       },
       class_type: "SaveImage",
@@ -350,11 +355,40 @@ export function createSD15Workflow(modelName: string, prompt: string, config: Pa
         title: "Save Image",
       },
     },
+    "8": {
+      inputs: {
+        samples: ["5", 0],
+        upscale_method: "nearest-exact",
+        scale_by: upscaleFactor,
+      },
+      class_type: "LatentUpscale",
+      _meta: {
+        title: "Upscale Latent",
+      },
+    },
+    "9": {
+      inputs: {
+        seed: seed,
+        steps: hiresSteps,
+        cfg: cfg,
+        sampler_name: sampler,
+        scheduler: scheduler,
+        denoise: hiresDenoise,
+        model: ["1", 0],
+        positive: ["2", 0],
+        negative: ["3", 0],
+        latent_image: ["8", 0],
+      },
+      class_type: "KSampler",
+      _meta: {
+        title: "KSampler (Hires Pass)",
+      },
+    },
   }
 
   // Add LoRA if specified
   if (loraPath) {
-    workflow["8"] = {
+    workflow["10"] = {
       inputs: {
         lora_name: loraPath,
         strength_model: loraStrength,
@@ -369,9 +403,10 @@ export function createSD15Workflow(modelName: string, prompt: string, config: Pa
     }
 
     // Update connections to use LoRA
-    workflow["2"].inputs.clip = ["8", 1]
-    workflow["3"].inputs.clip = ["8", 1]
-    workflow["5"].inputs.model = ["8", 0]
+    workflow["2"].inputs.clip = ["10", 1]
+    workflow["3"].inputs.clip = ["10", 1]
+    workflow["5"].inputs.model = ["10", 0]
+    workflow["9"].inputs.model = ["10", 0] // Also patch the hires sampler
   }
 
   return workflow
