@@ -343,29 +343,42 @@ async function startNodeTraining(trainingId: string, config: TrainingConfig, sta
   })
 }
 
-async function prepareTrainingData(trainingDir: string, config: TrainingConfig, status: TrainingStatus) {
+async function prepareTrainingData(
+  trainingDir: string,
+  config: TrainingConfig,
+  status: TrainingStatus,
+) {
   status.logs.push("📸 Preparing training images...")
 
   const imageDir = join(trainingDir, "images")
 
+  if (config.trainingImages.length === 0) {
+    throw new Error("No training images provided.")
+  }
+
   // Save training images
   for (let i = 0; i < config.trainingImages.length; i++) {
     const image = config.trainingImages[i]
+
+    if (!image.caption || image.caption.trim() === "") {
+      throw new Error(
+        `Missing caption for image ${
+          i + 1
+        }. All training images must have a user-provided caption.`,
+      )
+    }
+
     const filename = `${config.triggerWord}_${i + 1}.png`
     const imagePath = join(imageDir, filename)
     const captionPath = join(imageDir, `${config.triggerWord}_${i + 1}.txt`)
 
-    try {
-      // Save image (base64 to file)
-      const imageBuffer = Buffer.from(image.data, "base64")
-      await writeFile(imagePath, imageBuffer)
+    // The try/catch block is moved to the parent function startTrainingProcess
+    // Save image (base64 to file)
+    const imageBuffer = Buffer.from(image.data, "base64")
+    await writeFile(imagePath, imageBuffer)
 
-      // Save caption
-      const caption = image.caption || `${config.triggerWord}, high quality, detailed face, consistent character`
-      await writeFile(captionPath, caption)
-    } catch (error) {
-      status.logs.push(`⚠️ Failed to save image ${i + 1}: ${error}`)
-    }
+    // Save caption
+    await writeFile(captionPath, image.caption)
   }
 
   status.logs.push(`✅ Prepared ${config.trainingImages.length} training images`)
@@ -448,7 +461,7 @@ def main():
     tokenizer = CLIPTokenizer.from_pretrained(BASE_MODEL_REPO, subfolder="tokenizer")
     text_encoder = CLIPTextModel.from_pretrained(BASE_MODEL_REPO, subfolder="text_encoder")
     vae = AutoencoderKL.from_pretrained(BASE_MODEL_REPO, subfolder="vae")
-    
+
     # Load the UNet ARCHITECTURE from the base model repo
     print("Loading UNet architecture...")
     unet = UNet2DConditionModel.from_pretrained(BASE_MODEL_REPO, subfolder="unet")
