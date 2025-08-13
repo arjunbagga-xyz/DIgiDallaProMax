@@ -47,6 +47,7 @@ import {
   Pause,
   Target,
   Edit,
+  List,
 } from "lucide-react"
 import Image from "next/image"
 
@@ -239,6 +240,31 @@ export default function AutomationDashboard() {
   const [generatePromptsCount, setGeneratePromptsCount] = useState<number>(10)
   const [allContent, setAllContent] = useState<Content[]>([])
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null)
+  const [selectedTraining, setSelectedTraining] = useState<TrainingStatus | null>(null)
+
+  const viewTrainingDetails = async (trainingId: string) => {
+    try {
+      const baseUrl = window.location.origin
+      const response = await fetch(`${baseUrl}/api/lora/v2/train/${trainingId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setSelectedTraining(data)
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load training details",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Failed to load training details:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load training details",
+        variant: "destructive",
+      })
+    }
+  }
 
   useEffect(() => {
     const storedApiKey = localStorage.getItem("geminiApiKey")
@@ -1899,19 +1925,24 @@ export default function AutomationDashboard() {
                           <span className="text-sm font-medium">
                             {characters.find((c) => c.id === training.characterId)?.name || "Unknown"} LoRA
                           </span>
-                          <Badge
-                            variant={
-                              training.status === "completed"
-                                ? "default"
-                                : training.status === "failed"
-                                  ? "destructive"
-                                  : training.status === "training"
-                                    ? "secondary"
-                                    : "outline"
-                            }
-                          >
-                            {training.status}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant={
+                                training.status === "completed"
+                                  ? "default"
+                                  : training.status === "failed"
+                                    ? "destructive"
+                                    : training.status === "training"
+                                      ? "secondary"
+                                      : "outline"
+                              }
+                            >
+                              {training.status}
+                            </Badge>
+                            <Button size="sm" variant="outline" onClick={() => viewTrainingDetails(training.id)}>
+                              <List className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
                         {training.status === "training" && (
                           <div className="space-y-1">
@@ -1931,6 +1962,23 @@ export default function AutomationDashboard() {
                 </CardContent>
               </Card>
             </div>
+            {selectedTraining && (
+              <Dialog open={!!selectedTraining} onOpenChange={() => setSelectedTraining(null)}>
+                <DialogContent className="sm:max-w-[800px] max-h-[80vh] flex flex-col">
+                  <DialogHeader>
+                    <DialogTitle>Training Details: {selectedTraining.id}</DialogTitle>
+                    <DialogDescription>
+                      Status: {selectedTraining.status} ({selectedTraining.progress}%)
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="flex-grow overflow-y-auto p-4 bg-gray-900 text-white font-mono text-xs rounded-md">
+                    {selectedTraining.logs.map((log, index) => (
+                      <div key={index}>{log}</div>
+                    ))}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
             <Card>
               <CardHeader>
                 <CardTitle>How to Add Models</CardTitle>

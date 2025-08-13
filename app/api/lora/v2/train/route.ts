@@ -3,6 +3,7 @@ import { spawn } from "child_process"
 import { writeFile, mkdir, readFile } from "fs/promises"
 import { join } from "path"
 import { existsSync } from "fs"
+import { trainingStatuses, activeProcesses, TrainingStatus } from "@/lib/training-store"
 
 interface TrainingConfig {
   characterId: string
@@ -19,23 +20,6 @@ interface TrainingConfig {
   networkAlpha: number
   checkpointModelPath: string
 }
-
-interface TrainingStatus {
-  id: string
-  status: "preparing" | "training" | "completed" | "failed"
-  progress: number
-  currentStep: number
-  totalSteps: number
-  logs: string[]
-  error?: string
-  startTime: string
-  endTime?: string
-  outputPath?: string
-}
-
-// In-memory training status storage (in production, use a database)
-const trainingStatuses = new Map<string, TrainingStatus>()
-const activeProcesses = new Map<string, any>()
 
 export async function POST(request: NextRequest) {
   try {
@@ -148,17 +132,6 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const trainingId = searchParams.get("id")
-
-    if (trainingId) {
-      const status = trainingStatuses.get(trainingId)
-      if (!status) {
-        return NextResponse.json({ error: "Training not found" }, { status: 404 })
-      }
-      return NextResponse.json(status)
-    }
-
     // Return all training statuses
     const allStatuses = Array.from(trainingStatuses.values())
     return NextResponse.json({
