@@ -1705,7 +1705,7 @@ export default function AutomationDashboard() {
                     {trainingImages.length > 0 && (
                       <div className="grid grid-cols-4 gap-2">
                         {trainingImages.map((image, index) => (
-                          <Image key={index} src={`data:image/jpeg;base64,${image}`} alt={`Training image ${index + 1}`} className="rounded-md object-cover w-full h-24" width={96} height={96} />
+                          <Image key={index} src={`data:image/jpeg;base64,${image.data}`} alt={image.name} className="rounded-md object-cover w-full h-24" width={96} height={96} />
                         ))}
                       </div>
                     )}
