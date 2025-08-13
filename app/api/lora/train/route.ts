@@ -17,6 +17,7 @@ interface TrainingConfig {
   outputName: string
   networkDim: number
   networkAlpha: number
+  checkpointModelPath: string
 }
 
 interface TrainingStatus {
@@ -52,12 +53,33 @@ export async function POST(request: NextRequest) {
         const charactersData = await readFile(join(process.cwd(), "data", "characters.json"), "utf-8")
         const characters = JSON.parse(charactersData)
         character = characters.find((c: any) => c.id === characterId)
-        if (!character) {
-          return NextResponse.json({ error: "Character not found" }, { status: 404 })
-        }
       } catch (error) {
         return NextResponse.json({ error: "Failed to load character data" }, { status: 500 })
       }
+    }
+
+    if (!character) {
+      return NextResponse.json({ error: "Character not found" }, { status: 404 })
+    }
+    if (!character.preferredModel) {
+      return NextResponse.json(
+        { error: "Character does not have a preferredModel configured." },
+        { status: 400 },
+      )
+    }
+    const checkpointModelPath = join(
+      process.cwd(),
+      "ComfyUI",
+      "models",
+      "checkpoints",
+      character.preferredModel,
+    )
+
+    // This check is for a real environment. In the sandbox, it will fail.
+    if (!existsSync(checkpointModelPath)) {
+      console.warn(
+        `WARNING: Checkpoint model not found at path: ${checkpointModelPath}. The training will likely fail if this path is incorrect in a real environment.`,
+      )
     }
 
     const finalCharacterName = characterName || character?.name || "character"
@@ -67,16 +89,23 @@ export async function POST(request: NextRequest) {
     const trainingConfig: TrainingConfig = {
       characterId,
       characterName: finalCharacterName,
-      baseModel: body.baseModel || "flux1-dev.safetensors",
-      trainingImages: trainingImages.length > 0 ? trainingImages : generateSampleImages(finalCharacterName),
-      triggerWord: body.triggerWord || finalCharacterName.toLowerCase().replace(/\s+/g, "_"),
+      baseModel: body.baseModel || "stabilityai/stable-diffusion-xl-base-1.0", // Base for VAE/text encoder
+      trainingImages:
+        trainingImages.length > 0
+          ? trainingImages
+          : generateSampleImages(finalCharacterName),
+      triggerWord:
+        body.triggerWord || finalCharacterName.toLowerCase().replace(/\s+/g, "_"),
       steps,
       learningRate: body.learningRate || 1e-4,
       batchSize: body.batchSize || 1,
       resolution: body.resolution || 1024,
-      outputName: body.outputName || `${finalCharacterName.toLowerCase().replace(/\s+/g, "_")}_lora`,
+      outputName:
+        body.outputName ||
+        `${finalCharacterName.toLowerCase().replace(/\s+/g, "_")}_lora`,
       networkDim: body.networkDim || 32,
       networkAlpha: body.networkAlpha || 16,
+      checkpointModelPath,
     }
 
     // Initialize training status
@@ -216,25 +245,32 @@ async function startTrainingProcess(trainingId: string, config: TrainingConfig) 
     status.status = "training"
     status.logs.push("🚀 Starting LoRA training process...")
 
-    // Use actual Python training
-    const pythonPath = process.env.PYTHON_PATH || "python3"
+    // Setup Python environment
+    status.logs.push("🐍 Setting up Python environment...")
+    const setupScriptPath = join(process.cwd(), "scripts", "setup_python_env.sh")
+    const setupProcess = spawn("bash", [setupScriptPath], { stdio: "pipe" })
 
-    // Install dependencies
-    status.logs.push("📦 Installing Python dependencies...")
-    const pipInstall = spawn(pythonPath, ["-m", "pip", "install", "torch", "diffusers", "transformers", "peft", "safetensors", "accelerate"])
+    setupProcess.stdout?.on("data", (data) => {
+      status.logs.push(`setup: ${data.toString().trim()}`)
+    })
 
-    pipInstall.stdout.on('data', (data) => {
-      status.logs.push(`pip: ${data.toString()}`);
-    });
+    setupProcess.stderr?.on("data", (data) => {
+      status.logs.push(`setup-error: ${data.toString().trim()}`)
+    })
 
-    pipInstall.stderr.on('data', (data) => {
-      status.logs.push(`pip-error: ${data.toString()}`);
-    });
+    await new Promise((resolve, reject) => {
+      setupProcess.on("close", (code) => {
+        if (code === 0) {
+          status.logs.push("✅ Python environment is ready.")
+          resolve(code)
+        } else {
+          reject(new Error(`Python environment setup failed with code ${code}`))
+        }
+      })
+    })
 
-    await new Promise(resolve => pipInstall.on('close', resolve));
-    status.logs.push("✅ Python dependencies installed.")
-
-
+    // Use Python from virtual environment
+    const pythonPath = join(process.cwd(), ".venv", "bin", "python3")
     const trainingProcess = spawn(pythonPath, [scriptPath], {
       cwd: trainingDir,
       stdio: "pipe",
@@ -335,17 +371,20 @@ async function prepareTrainingData(trainingDir: string, config: TrainingConfig, 
   status.logs.push(`✅ Prepared ${config.trainingImages.length} training images`)
 }
 
-async function createTrainingScript(trainingDir: string, config: TrainingConfig): Promise<string> {
+async function createTrainingScript(
+  trainingDir: string,
+  config: TrainingConfig,
+): Promise<string> {
   const scriptPath = join(trainingDir, "train_lora.py")
 
-  // Using a real training script with diffusers
+  // New script with logic to load from a local checkpoint
   const script = `#!/usr/bin/env python3
 import os
 import sys
 import torch
-from diffusers import StableDiffusionPipeline, UNet2DConditionModel, DDPMScheduler
+from safetensors.torch import load_file
+from diffusers import UNet2DConditionModel, DDPMScheduler
 from diffusers.models import AutoencoderKL
-from diffusers.training_utils import EMAModel
 from transformers import CLIPTextModel, CLIPTokenizer
 from peft import LoraConfig, get_peft_model
 from torch.utils.data import Dataset, DataLoader
@@ -354,7 +393,8 @@ from PIL import Image
 import time
 
 # --- Configuration ---
-MODEL_NAME = "${config.baseModel}"
+BASE_MODEL_REPO = "${config.baseModel}"
+CHECKPOINT_MODEL_PATH = "${config.checkpointModelPath}"
 INSTANCE_DIR = "${join(trainingDir, "images")}"
 OUTPUT_DIR = "${join(trainingDir, "output")}"
 TRIGGER_WORD = "${config.triggerWord}"
@@ -401,13 +441,41 @@ class DreamBoothDataset(Dataset):
 
 # --- Main Training Logic ---
 def main():
-    print("--- Initializing LoRA Training ---")
+    print("--- Initializing LoRA Training with Custom Checkpoint ---")
+
+    # Load non-UNet components from the base model repo
+    print(f"Loading base model components from {BASE_MODEL_REPO}...")
+    tokenizer = CLIPTokenizer.from_pretrained(BASE_MODEL_REPO, subfolder="tokenizer")
+    text_encoder = CLIPTextModel.from_pretrained(BASE_MODEL_REPO, subfolder="text_encoder")
+    vae = AutoencoderKL.from_pretrained(BASE_MODEL_REPO, subfolder="vae")
     
-    # Load models
-    tokenizer = CLIPTokenizer.from_pretrained(MODEL_NAME, subfolder="tokenizer")
-    text_encoder = CLIPTextModel.from_pretrained(MODEL_NAME, subfolder="text_encoder")
-    vae = AutoencoderKL.from_pretrained(MODEL_NAME, subfolder="vae")
-    unet = UNet2DConditionModel.from_pretrained(MODEL_NAME, subfolder="unet")
+    # Load the UNet ARCHITECTURE from the base model repo
+    print("Loading UNet architecture...")
+    unet = UNet2DConditionModel.from_pretrained(BASE_MODEL_REPO, subfolder="unet")
+
+    # Load the state dict from the custom checkpoint
+    print(f"Loading custom UNet weights from {CHECKPOINT_MODEL_PATH}...")
+    if not os.path.exists(CHECKPOINT_MODEL_PATH):
+        print(f"❌ ERROR: Checkpoint file not found at {CHECKPOINT_MODEL_PATH}")
+        sys.exit(1)
+
+    checkpoint_state_dict = load_file(CHECKPOINT_MODEL_PATH, device="cpu")
+
+    # Filter for UNet keys
+    unet_state_dict = {}
+    for k, v in checkpoint_state_dict.items():
+        if k.startswith("model.diffusion_model."):
+            unet_state_dict[k.replace("model.diffusion_model.", "")] = v
+        elif k.startswith("unet."):
+            unet_state_dict[k.replace("unet.", "")] = v
+
+    if not unet_state_dict:
+        print("⚠️ WARNING: No UNet weights found with common prefixes ('model.diffusion_model.', 'unet.'). Loading the whole checkpoint directly. This might fail if the checkpoint contains non-UNet weights.")
+        unet_state_dict = checkpoint_state_dict
+
+    # Load the filtered state dict into the UNet
+    unet.load_state_dict(unet_state_dict, strict=False)
+    print("✅ Custom UNet weights loaded successfully.")
 
     # Add LoRA to UNet
     lora_config = LoraConfig(
@@ -438,40 +506,37 @@ def main():
 
     # Training loop
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
     unet.to(device)
     vae.to(device)
     text_encoder.to(device)
 
-    noise_scheduler = DDPMScheduler.from_pretrained(MODEL_NAME, subfolder="scheduler")
+    noise_scheduler = DDPMScheduler.from_pretrained(BASE_MODEL_REPO, subfolder="scheduler")
 
     print(f"🚀 Starting training for {STEPS} steps...")
     global_step = 0
 
-    for epoch in range(int(STEPS / (len(train_dataloader) / BATCH_SIZE)) + 1):
+    for epoch in range(int(STEPS / len(train_dataloader)) + 1):
         unet.train()
         for step, batch in enumerate(train_dataloader):
             if global_step >= STEPS:
                 break
 
-            # Convert images to latent space
-            latents = vae.encode(batch["instance_images"].to(device)).latent_dist.sample()
-            latents = latents * vae.config.scaling_factor
+            with torch.no_grad():
+                latents = vae.encode(batch["instance_images"].to(device, dtype=torch.float32)).latent_dist.sample()
+                latents = latents * vae.config.scaling_factor
 
-            # Sample noise
             noise = torch.randn_like(latents)
             bsz = latents.shape[0]
             timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device).long()
 
-            # Add noise to the latents
             noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
-            # Get the text embedding
-            encoder_hidden_states = text_encoder(batch["instance_prompt_ids"].squeeze(1).to(device))[0]
+            with torch.no_grad():
+                encoder_hidden_states = text_encoder(batch["instance_prompt_ids"].squeeze(1).to(device))[0]
 
-            # Predict the noise residual
             model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
             
-            # Get the target for loss depending on the scheduler prediction type
             if noise_scheduler.config.prediction_type == "epsilon":
                 target = noise
             elif noise_scheduler.config.prediction_type == "v_prediction":
@@ -494,7 +559,6 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     unet.save_pretrained(OUTPUT_DIR)
     
-    # For compatibility, we can also save as a single safetensors file
     from safetensors.torch import save_file
     
     lora_layers = unet.state_dict()
@@ -502,7 +566,6 @@ def main():
     save_file(lora_layers, final_lora_path)
     
     print(f"📁 LoRA model saved to: {final_lora_path}")
-
 
 if __name__ == "__main__":
     try:

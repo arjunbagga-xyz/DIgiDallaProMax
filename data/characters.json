@@ -7,6 +7,7 @@
     "instagramHandle": "",
     "isActive": true,
     "createdAt": "2025-08-07T00:57:56.811Z",
-    "updatedAt": "2025-08-07T00:57:56.811Z"
+    "updatedAt": "2025-08-07T00:57:56.811Z",
+    "preferredModel": "dummy_model.safetensors"
   }
 ]
