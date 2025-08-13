@@ -238,6 +238,7 @@ export default function AutomationDashboard() {
   const [generatePromptsCharacterId, setGeneratePromptsCharacterId] = useState<string>("")
   const [generatePromptsCount, setGeneratePromptsCount] = useState<number>(10)
   const [allContent, setAllContent] = useState<Content[]>([])
+  const [editingCharacter, setEditingCharacter] = useState<Character | null>(null)
 
   useEffect(() => {
     const storedApiKey = localStorage.getItem("geminiApiKey")
@@ -1516,6 +1517,9 @@ export default function AutomationDashboard() {
                         {character.name}
                       </div>
                       <div className="flex gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => setEditingCharacter(character)}>
+                          <Edit className="w-4 h-4" />
+                        </Button>
                         <Button
                           size="sm"
                           variant="ghost"
@@ -1712,6 +1716,90 @@ export default function AutomationDashboard() {
                   </div>
                   <Button onClick={() => trainLora(loraTrainingCharacter.id, loraTrainingBaseModel)} disabled={isLoading || trainingImages.length === 0 || !loraTrainingBaseModel}>
                     {isLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : "Start Training"}
+                  </Button>
+                </DialogContent>
+              </Dialog>
+            )}
+
+            {editingCharacter && (
+              <Dialog open={!!editingCharacter} onOpenChange={() => setEditingCharacter(null)}>
+                <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Edit {editingCharacter.name}</DialogTitle>
+                    <DialogDescription>
+                      Update the details for this character. Click save when you&apos;re done.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="edit-name">Character Name</Label>
+                        <Input
+                          id="edit-name"
+                          value={editingCharacter.name}
+                          onChange={(e) => setEditingCharacter({ ...editingCharacter, name: e.target.value })}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="edit-triggerWord">Trigger Word</Label>
+                        <Input
+                          id="edit-triggerWord"
+                          value={editingCharacter.triggerWord || ""}
+                          onChange={(e) => setEditingCharacter({ ...editingCharacter, triggerWord: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-personality">Personality</Label>
+                      <Input
+                        id="edit-personality"
+                        value={editingCharacter.personality}
+                        onChange={(e) => setEditingCharacter({ ...editingCharacter, personality: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-backstory">Backstory</Label>
+                      <Textarea
+                        id="edit-backstory"
+                        value={editingCharacter.backstory}
+                        onChange={(e) => setEditingCharacter({ ...editingCharacter, backstory: e.target.value })}
+                        rows={3}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="edit-instagram">Instagram Handle</Label>
+                        <Input
+                          id="edit-instagram"
+                          value={editingCharacter.instagramHandle}
+                          onChange={(e) => setEditingCharacter({ ...editingCharacter, instagramHandle: e.target.value })}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="edit-preferredModel">Preferred Model</Label>
+                        <Select
+                          value={editingCharacter.preferredModel}
+                          onValueChange={(value) => setEditingCharacter({ ...editingCharacter, preferredModel: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select model" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableModels.map((model) => (
+                              <SelectItem key={model.id} value={model.name}>
+                                {model.name.replace(".safetensors", "").replace(".ckpt", "")}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                  <Button onClick={() => {
+                    updateCharacter(editingCharacter.id, editingCharacter);
+                    setEditingCharacter(null);
+                  }} disabled={isLoading}>
+                    Save Changes
                   </Button>
                 </DialogContent>
               </Dialog>
