@@ -342,7 +342,7 @@ async function executeGenerateAndPost(task: ScheduledTask) {
 async function executeTrainLora(task: ScheduledTask) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
 
-  const response = await fetch(`${baseUrl}/api/lora/train`, {
+  const response = await fetch(`${baseUrl}/api/lora/v2/train`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

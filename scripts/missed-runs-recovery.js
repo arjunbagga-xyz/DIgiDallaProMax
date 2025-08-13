@@ -254,7 +254,7 @@ async function executeGenerateOnly(task, character) {
 }
 
 async function executeTrainLora(task, character) {
-  const response = await fetch(`${CONFIG.baseUrl}/api/lora/train`, {
+  const response = await fetch(`${CONFIG.baseUrl}/api/lora/v2/train`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
