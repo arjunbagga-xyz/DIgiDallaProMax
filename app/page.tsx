@@ -229,7 +229,7 @@ export default function AutomationDashboard() {
   const [deploymentStatus, setDeploymentStatus] = useState<{ [key: string]: any }>({})
   const [loraTrainingCharacter, setLoraTrainingCharacter] = useState<Character | null>(null)
   const [loraTrainingBaseModel, setLoraTrainingBaseModel] = useState<string>("")
-  const [trainingImages, setTrainingImages] = useState<string[]>([])
+  const [trainingImages, setTrainingImages] = useState<{data: string, caption: string, name: string}[]>([])
   const [promptCaptions, setPromptCaptions] = useState<{ [key: string]: string }>({})
   const [geminiApiKey, setGeminiApiKey] = useState("")
   const [promptSearchTerm, setPromptSearchTerm] = useState("")
@@ -950,7 +950,7 @@ export default function AutomationDashboard() {
           triggerWord: character.triggerWord,
           steps: 1000,
           learningRate: 1e-4,
-          trainingImages: trainingImages.map(img => ({ data: img })),
+          trainingImages: trainingImages.map(img => ({ data: img.data, caption: img.caption })),
         }),
       })
 
@@ -1621,21 +1621,68 @@ export default function AutomationDashboard() {
                         id="training-images"
                         type="file"
                         multiple
-                        accept="image/png, image/jpeg"
+                        accept="image/png, image/jpeg, .txt"
                         onChange={(e) => {
                           if (e.target.files) {
-                            const files = Array.from(e.target.files)
-                            const base64Promises = files.map(file => {
-                              return new Promise<string>((resolve, reject) => {
-                                const reader = new FileReader()
-                                reader.readAsDataURL(file)
-                                reader.onload = () => resolve(reader.result as string)
-                                reader.onerror = error => reject(error)
-                              })
-                            })
-                            Promise.all(base64Promises).then(images => {
-                              setTrainingImages(images.map(img => img.split(',')[1]))
-                            })
+                            const allFiles = Array.from(e.target.files);
+                            const imageFiles = allFiles.filter(f => f.type.startsWith('image/'));
+                            const textFiles = allFiles.filter(f => f.name.endsWith('.txt'));
+
+                            const filePairs = imageFiles.map(imageFile => {
+                                const baseName = imageFile.name.split('.').slice(0, -1).join('.');
+                                const textFile = textFiles.find(f => f.name === `${baseName}.txt`);
+                                return { imageFile, textFile };
+                            });
+
+                            toast({
+                                title: "Processing files...",
+                                description: `Found ${imageFiles.length} images and ${textFiles.length} text files.`,
+                            });
+
+                            const readPromises = filePairs.map(({ imageFile, textFile }) => {
+                                const imagePromise = new Promise<{data: string, name: string}>((resolve, reject) => {
+                                    const reader = new FileReader();
+                                    reader.readAsDataURL(imageFile);
+                                    reader.onload = () => resolve({ data: (reader.result as string).split(',')[1], name: imageFile.name });
+                                    reader.onerror = reject;
+                                });
+
+                                const captionPromise = new Promise<string | null>((resolve, reject) => {
+                                    if (textFile) {
+                                        const reader = new FileReader();
+                                        reader.readAsText(textFile);
+                                        reader.onload = () => resolve(reader.result as string);
+                                        reader.onerror = reject;
+                                    } else {
+                                        resolve(null);
+                                    }
+                                });
+
+                                return Promise.all([imagePromise, captionPromise]);
+                            });
+
+                            Promise.all(readPromises).then(results => {
+                                const imageData = results
+                                    .filter(([, caption]) => caption !== null)
+                                    .map(([image, caption]) => ({
+                                        data: image.data,
+                                        name: image.name,
+                                        caption: caption as string,
+                                    }));
+
+                                const imagesWithCaptions = imageData.length;
+                                const imagesWithoutCaptions = filePairs.length - imagesWithCaptions;
+
+                                if (imagesWithoutCaptions > 0) {
+                                    toast({
+                                        title: "Missing Captions",
+                                        description: `${imagesWithoutCaptions} image(s) were ignored because a matching .txt caption file was not found.`,
+                                        variant: "destructive"
+                                    });
+                                }
+
+                                setTrainingImages(imageData);
+                            });
                           }
                         }}
                       />
