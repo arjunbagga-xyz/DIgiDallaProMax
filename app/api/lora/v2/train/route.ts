@@ -30,16 +30,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Character ID is required" }, { status: 400 })
     }
 
-    // Load character data if not provided
+    // Load character data
     let character = null
-    if (!characterName) {
-      try {
-        const charactersData = await readFile(join(process.cwd(), "data", "characters.json"), "utf-8")
-        const characters = JSON.parse(charactersData)
-        character = characters.find((c: any) => c.id === characterId)
-      } catch (error) {
-        return NextResponse.json({ error: "Failed to load character data" }, { status: 500 })
-      }
+    try {
+      const charactersData = await readFile(join(process.cwd(), "data", "characters.json"), "utf-8")
+      const characters = JSON.parse(charactersData)
+      character = characters.find((c: any) => c.id === characterId)
+    } catch (error) {
+      return NextResponse.json({ error: "Failed to load character data" }, { status: 500 })
     }
 
     if (!character) {
