@@ -40,7 +40,9 @@ async function runAutomation() {
   try {
     console.log("Running scheduled automation...")
 
-    const response = await fetch("http://localhost:3000/api/automation", {
+    // Use a configurable base URL instead of hardcoded localhost
+    const baseUrl = process.env.API_BASE_URL || "http://localhost:3000"
+    const response = await fetch(`${baseUrl}/api/automation`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

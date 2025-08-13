@@ -257,7 +257,8 @@ export default function AutomationDashboard() {
 
   const checkSystemStatus = useCallback(async () => {
     try {
-      const response = await fetch("/api/system/status")
+      const baseUrl = window.location.origin
+      const response = await fetch(`${baseUrl}/api/system/status`)
       if (response.ok) {
         const status = await response.json()
         setSystemStatus(status)
@@ -269,7 +270,8 @@ export default function AutomationDashboard() {
 
   const loadCharacters = useCallback(async () => {
     try {
-      const response = await fetch("/api/characters")
+      const baseUrl = window.location.origin
+      const response = await fetch(`${baseUrl}/api/characters`)
       if (response.ok) {
         const data = await response.json()
         setCharacters(data.characters || [])
@@ -285,7 +287,8 @@ export default function AutomationDashboard() {
 
   const loadScheduledTasks = useCallback(async () => {
     try {
-      const response = await fetch("/api/scheduler")
+      const baseUrl = window.location.origin
+      const response = await fetch(`${baseUrl}/api/scheduler`)
       if (response.ok) {
         const data = await response.json()
         setScheduledTasks(data.tasks || [])
@@ -297,7 +300,8 @@ export default function AutomationDashboard() {
 
   const loadModels = useCallback(async () => {
     try {
-      const response = await fetch("/api/models")
+      const baseUrl = window.location.origin
+      const response = await fetch(`${baseUrl}/api/models`)
       if (response.ok) {
         const data = await response.json()
         setModels(data.models || [])
@@ -309,7 +313,8 @@ export default function AutomationDashboard() {
 
   const loadTrainings = useCallback(async () => {
     try {
-      const response = await fetch("/api/lora/v2/train")
+      const baseUrl = window.location.origin
+      const response = await fetch(`${baseUrl}/api/lora/v2/train`)
       if (response.ok) {
         const data = await response.json()
         setTrainings(data.trainings || [])
@@ -321,7 +326,8 @@ export default function AutomationDashboard() {
 
   const loadPrompts = useCallback(async () => {
     try {
-      const response = await fetch("/api/prompts")
+      const baseUrl = window.location.origin
+      const response = await fetch(`${baseUrl}/api/prompts`)
       if (response.ok) {
         const data = await response.json()
         setPrompts(data.prompts || [])
@@ -333,7 +339,8 @@ export default function AutomationDashboard() {
 
   const loadAvailableModels = useCallback(async () => {
     try {
-      const response = await fetch("/api/models?show=all")
+      const baseUrl = window.location.origin
+      const response = await fetch(`${baseUrl}/api/models?show=all`)
       if (response.ok) {
         const data = await response.json()
         const checkpoints = data.models.filter((m: ModelInfo) => m.type === "checkpoint")
@@ -348,7 +355,8 @@ export default function AutomationDashboard() {
 
   const loadContent = useCallback(async () => {
     try {
-      const response = await fetch("/api/content")
+      const baseUrl = window.location.origin
+      const response = await fetch(`${baseUrl}/api/content`)
       if (response.ok) {
         const data = await response.json()
         setAllContent(data.content || [])
@@ -396,7 +404,8 @@ export default function AutomationDashboard() {
 
     setIsLoading(true)
     try {
-      const response = await fetch("/api/characters", {
+      const baseUrl = window.location.origin
+      const response = await fetch(`${baseUrl}/api/characters`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newCharacter),
@@ -498,7 +507,8 @@ export default function AutomationDashboard() {
   const runMissedTask = async (taskId: string, timestamp: string) => {
     setIsLoading(true)
     try {
-      const response = await fetch("/api/scheduler", {
+      const baseUrl = window.location.origin
+      const response = await fetch(`${baseUrl}/api/scheduler`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "run_missed_task", taskId, timestamp }),
@@ -891,7 +901,8 @@ export default function AutomationDashboard() {
         }))
       }, 1000)
 
-      const response = await fetch("/api/workflows/generate-content", {
+      const baseUrl = window.location.origin
+      const response = await fetch(`${baseUrl}/api/workflows/generate-content`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ character, apiKey: geminiApiKey }),
@@ -941,7 +952,9 @@ export default function AutomationDashboard() {
 
     setIsLoading(true)
     try {
-      const response = await fetch("/api/lora/v2/train", {
+      // Use the current window location to determine the base URL
+      const baseUrl = window.location.origin
+      const response = await fetch(`${baseUrl}/api/lora/v2/train`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1039,7 +1052,8 @@ export default function AutomationDashboard() {
   const deployToGitHub = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch("/api/deployment", {
+      const baseUrl = window.location.origin
+      const response = await fetch(`${baseUrl}/api/deployment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1076,7 +1090,8 @@ export default function AutomationDashboard() {
   const deployToVercel = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch("/api/deployment", {
+      const baseUrl = window.location.origin
+      const response = await fetch(`${baseUrl}/api/deployment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -20,7 +20,8 @@ export default function SetupPage() {
   const checkStatus = async () => {
     setLoading(true)
     try {
-      const response = await fetch("/api/system/status")
+      const baseUrl = window.location.origin
+      const response = await fetch(`${baseUrl}/api/system/status`)
       const data = await response.json()
       setStatus(data.status)
     } catch (error) {

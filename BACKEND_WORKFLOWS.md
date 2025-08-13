@@ -156,10 +156,10 @@ This file stores an array of generated prompt objects.
 
 *   **Train LoRA Button**:
     *   **UI Action**: Opens a dialog to train a LoRA model for the selected character.
-    *   **Backend API Call**: `POST /api/lora/train`
+    *   **Backend API Call**: `POST /api/lora/v2/train`
     *   **Workflow**:
-        1.  The frontend sends a POST request to `/api/lora/train` with the character's ID, training images, and other training parameters.
-        2.  The API route handler in `app/api/lora/train/route.ts` receives the request.
+        1.  The frontend sends a POST request to `/api/lora/v2/train` with the character's ID, training images, and other training parameters.
+        2.  The API route handler in `app/api/lora/v2/train/route.ts` receives the request.
         3.  It initiates a LoRA training process on the ComfyUI server.
         4.  A success response is returned to the frontend.
     *   **Database Interaction**: None directly, but it reads character data which comes from `data/characters.json`.

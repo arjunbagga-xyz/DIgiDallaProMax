@@ -100,4 +100,4 @@ This allows for the seamless application of LoRA models to any of the base image
 
 ## 4. LoRA Training
 
-The application does not currently use a ComfyUI workflow for LoRA training. The `trainLora` function in `app/page.tsx` sends a request to the `/api/lora/train` endpoint, which is expected to handle the training process through a different mechanism, such as by calling a script or interacting with a dedicated training service like Kohya SS. The details of this process are not defined within the ComfyUI workflow files.
+The application does not currently use a ComfyUI workflow for LoRA training. The `trainLora` function in `app/page.tsx` sends a request to the `/api/lora/v2/train` endpoint, which is expected to handle the training process through a different mechanism, such as by calling a script or interacting with a dedicated training service like Kohya SS. The details of this process are not defined within the ComfyUI workflow files.
