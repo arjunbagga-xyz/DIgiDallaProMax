@@ -390,15 +390,14 @@ async function createTrainingScript(
 ): Promise<string> {
   const scriptPath = join(trainingDir, "train_lora.py")
 
-  // New script with logic to load from a local checkpoint and use per-image captions
+  // New script with logic to load all components from a single local checkpoint
   const script = `#!/usr/bin/env python3
 import os
 import sys
 import torch
 from safetensors.torch import load_file
-from diffusers import UNet2DConditionModel, DDPMScheduler
-from diffusers.models import AutoencoderKL
-from transformers import CLIPTextModel, CLIPTokenizer
+from diffusers import UNet2DConditionModel, DDPMScheduler, AutoencoderKL
+from transformers import CLIPTextModel, CLIPTokenizer, CLIPTextConfig, CLIPVisionConfig
 from peft import LoraConfig, get_peft_model
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
@@ -406,7 +405,8 @@ from PIL import Image
 import time
 
 # --- Configuration ---
-BASE_MODEL_REPO = "${config.baseModel}"
+# Using a standard repo for model CONFIGS ONLY, not weights
+BASE_CONFIG_REPO = "stabilityai/stable-diffusion-xl-base-1.0"
 CHECKPOINT_MODEL_PATH = "${config.checkpointModelPath}"
 INSTANCE_DIR = "${join(trainingDir, "images")}"
 OUTPUT_DIR = "${join(trainingDir, "output")}"
@@ -418,6 +418,18 @@ RESOLUTION = ${config.resolution}
 NETWORK_DIM = ${config.networkDim}
 NETWORK_ALPHA = ${config.networkAlpha}
 OUTPUT_NAME = "${config.outputName}"
+
+# --- Helper Functions ---
+def get_state_dict_from_checkpoint(checkpoint_path, key_prefix):
+    print(f"Filtering state dict for prefix: {key_prefix}")
+    checkpoint_state_dict = load_file(checkpoint_path, device="cpu")
+    filtered_state_dict = {}
+    for k, v in checkpoint_state_dict.items():
+        if k.startswith(key_prefix):
+            filtered_state_dict[k.replace(key_prefix, "")] = v
+    if not filtered_state_dict:
+        print(f"⚠️ WARNING: No keys found with prefix '{key_prefix}'. The component may not load correctly.")
+    return filtered_state_dict
 
 # --- Dataset ---
 class DreamBoothDataset(Dataset):
@@ -465,41 +477,39 @@ class DreamBoothDataset(Dataset):
 
 # --- Main Training Logic ---
 def main():
-    print("--- Initializing LoRA Training with Custom Checkpoint ---")
+    print("--- Initializing LoRA Training from single checkpoint ---")
 
-    # Load non-UNet components from the base model repo
-    print(f"Loading base model components from {BASE_MODEL_REPO}...")
-    tokenizer = CLIPTokenizer.from_pretrained(BASE_MODEL_REPO, subfolder="tokenizer")
-    text_encoder = CLIPTextModel.from_pretrained(BASE_MODEL_REPO, subfolder="text_encoder")
-    vae = AutoencoderKL.from_pretrained(BASE_MODEL_REPO, subfolder="vae")
-
-    # Load the UNet ARCHITECTURE from the base model repo
-    print("Loading UNet architecture...")
-    unet = UNet2DConditionModel.from_pretrained(BASE_MODEL_REPO, subfolder="unet")
-
-    # Load the state dict from the custom checkpoint
-    print(f"Loading custom UNet weights from {CHECKPOINT_MODEL_PATH}...")
     if not os.path.exists(CHECKPOINT_MODEL_PATH):
         print(f"❌ ERROR: Checkpoint file not found at {CHECKPOINT_MODEL_PATH}")
         sys.exit(1)
 
-    checkpoint_state_dict = load_file(CHECKPOINT_MODEL_PATH, device="cpu")
+    # Load Tokenizer from base config repo
+    print(f"Loading tokenizer from {BASE_CONFIG_REPO}...")
+    tokenizer = CLIPTokenizer.from_pretrained(BASE_CONFIG_REPO, subfolder="tokenizer")
 
-    # Filter for UNet keys
-    unet_state_dict = {}
-    for k, v in checkpoint_state_dict.items():
-        if k.startswith("model.diffusion_model."):
-            unet_state_dict[k.replace("model.diffusion_model.", "")] = v
-        elif k.startswith("unet."):
-            unet_state_dict[k.replace("unet.", "")] = v
+    # Load VAE from checkpoint
+    print("Loading VAE...")
+    vae_config = AutoencoderKL.load_config(BASE_CONFIG_REPO, subfolder="vae")
+    vae = AutoencoderKL.from_config(vae_config)
+    vae_state_dict = get_state_dict_from_checkpoint(CHECKPOINT_MODEL_PATH, "first_stage_model.")
+    vae.load_state_dict(vae_state_dict, strict=False)
+    print("✅ VAE loaded from checkpoint.")
 
-    if not unet_state_dict:
-        print("⚠️ WARNING: No UNet weights found with common prefixes ('model.diffusion_model.', 'unet.'). Loading the whole checkpoint directly. This might fail if the checkpoint contains non-UNet weights.")
-        unet_state_dict = checkpoint_state_dict
+    # Load Text Encoder from checkpoint
+    print("Loading Text Encoder...")
+    text_encoder_config = CLIPTextConfig.from_pretrained(BASE_CONFIG_REPO, subfolder="text_encoder")
+    text_encoder = CLIPTextModel(text_encoder_config)
+    text_encoder_state_dict = get_state_dict_from_checkpoint(CHECKPOINT_MODEL_PATH, "cond_stage_model.model.transformer.text_model.")
+    text_encoder.load_state_dict(text_encoder_state_dict, strict=False)
+    print("✅ Text Encoder loaded from checkpoint.")
 
-    # Load the filtered state dict into the UNet
+    # Load UNet from checkpoint
+    print("Loading UNet...")
+    unet_config = UNet2DConditionModel.load_config(BASE_CONFIG_REPO, subfolder="unet")
+    unet = UNet2DConditionModel.from_config(unet_config)
+    unet_state_dict = get_state_dict_from_checkpoint(CHECKPOINT_MODEL_PATH, "model.diffusion_model.")
     unet.load_state_dict(unet_state_dict, strict=False)
-    print("✅ Custom UNet weights loaded successfully.")
+    print("✅ UNet loaded from checkpoint.")
 
     # Add LoRA to UNet
     lora_config = LoraConfig(
@@ -535,7 +545,7 @@ def main():
     vae.to(device)
     text_encoder.to(device)
 
-    noise_scheduler = DDPMScheduler.from_pretrained(BASE_MODEL_REPO, subfolder="scheduler")
+    noise_scheduler = DDPMScheduler.from_pretrained(BASE_CONFIG_REPO, subfolder="scheduler")
 
     print(f"🚀 Starting training for {STEPS} steps...")
     global_step = 0
@@ -560,7 +570,7 @@ def main():
                 encoder_hidden_states = text_encoder(batch["instance_prompt_ids"].squeeze(1).to(device))[0]
 
             model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
-            
+
             if noise_scheduler.config.prediction_type == "epsilon":
                 target = noise
             elif noise_scheduler.config.prediction_type == "v_prediction":
@@ -582,13 +592,13 @@ def main():
     # Save LoRA model
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     unet.save_pretrained(OUTPUT_DIR)
-    
+
     from safetensors.torch import save_file
-    
+
     lora_layers = unet.state_dict()
     final_lora_path = os.path.join(OUTPUT_DIR, f"{OUTPUT_NAME}.safetensors")
     save_file(lora_layers, final_lora_path)
-    
+
     print(f"📁 LoRA model saved to: {final_lora_path}")
 
 if __name__ == "__main__":

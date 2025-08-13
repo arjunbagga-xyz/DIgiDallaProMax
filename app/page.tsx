@@ -309,7 +309,7 @@ export default function AutomationDashboard() {
 
   const loadTrainings = useCallback(async () => {
     try {
-      const response = await fetch("/api/lora/train")
+      const response = await fetch("/api/lora/v2/train")
       if (response.ok) {
         const data = await response.json()
         setTrainings(data.trainings || [])
@@ -941,7 +941,7 @@ export default function AutomationDashboard() {
 
     setIsLoading(true)
     try {
-      const response = await fetch("/api/lora/train", {
+      const response = await fetch("/api/lora/v2/train", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
