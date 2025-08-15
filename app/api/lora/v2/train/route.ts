@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     const {
       characterId,
       characterName,
-      modelFile, // Added to receive the model file from the UI
+      baseModel, // Use baseModel from the request body
       trainingImages = [],
       steps = 1000,
     } = body
@@ -53,8 +53,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Character not found" }, { status: 404 })
     }
 
-    // Priority: 1. Model from request (body.modelFile), 2. Character's preferred model
-    const finalModelFile = modelFile || character.preferredModel
+    // Priority: 1. Model from request (body.baseModel), 2. Character's preferred model
+    const finalModelFile = baseModel || character.preferredModel
     if (!finalModelFile) {
       return NextResponse.json(
         {
