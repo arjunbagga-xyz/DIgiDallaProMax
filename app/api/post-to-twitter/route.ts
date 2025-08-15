@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { TwitterApi } from "twitter-api-v2"
-import { readFile } from "fs/promises"
-import { join } from "path"
+import { promises as fs } from "fs"
+import path from "path"
 
 interface Character {
   id: string
@@ -14,7 +14,7 @@ interface Character {
 
 async function loadCharacters(): Promise<Character[]> {
   try {
-    const data = await readFile(join(process.cwd(), "data", "characters.json"), "utf-8")
+    const data = await fs.readFile(path.join(process.cwd(), "data", "characters.json"), "utf-8")
     return JSON.parse(data)
   } catch (error) {
     console.error("Failed to load characters:", error)
@@ -29,7 +29,12 @@ async function getContent() {
     const data = await fs.readFile(contentFilePath, "utf-8")
     return JSON.parse(data)
   } catch (error) {
-    if (error.code === "ENOENT") {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
       return []
     }
     throw error

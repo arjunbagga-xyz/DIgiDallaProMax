@@ -1985,7 +1985,7 @@ export default function AutomationDashboard() {
                 <CardDescription>Instructions for adding your own models.</CardDescription>
               </CardHeader>
               <CardContent className="text-sm text-gray-600 space-y-2">
-                <p>To add your own models, place the files in the following directories in the project's root:</p>
+                <p>To add your own models, place the files in the following directories in the project&apos;s root:</p>
                 <ul className="list-disc pl-5 space-y-1">
                   <li>For checkpoint models (e.g., SDXL, SD1.5): <code className="bg-gray-100 p-1 rounded">models/checkpoints/</code></li>
                   <li>For LoRA models: <code className="bg-gray-100 p-1 rounded">models/loras/</code></li>
@@ -2370,8 +2370,8 @@ export default function AutomationDashboard() {
                     <h4 className="font-semibold">Setup Steps:</h4>
                     <ol className="list-decimal pl-5 mt-2 space-y-1">
                       <li>Create a `Dockerfile` in your project root (a sample is in the documentation).</li>
-                      <li>Build the Docker image: <code className="bg-gray-100 p-1 rounded">docker build -t &quot;instagram-ai-bot&quot; .</code></li>
-                      <li>Run the container, passing your environment variables: <code className="bg-gray-100 p-1 rounded">docker run -p 3000:3000 -d --env-file .env.local instagram-ai-bot</code></li>
+                      <li>Build the Docker image: <code className="bg-gray-100 p-1 rounded">{'docker build -t &quot;instagram-ai-bot&quot; .'}</code></li>
+                      <li>Run the container, passing your environment variables: <code className="bg-gray-100 p-1 rounded">{'docker run -p 3000:3000 -d --env-file .env.local instagram-ai-bot'}</code></li>
                     </ol>
                   </div>
                 </CardContent>

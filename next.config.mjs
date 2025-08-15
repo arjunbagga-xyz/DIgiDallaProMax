@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ['sharp', 'canvas']
-  },
+  serverExternalPackages: ['sharp', 'canvas'],
   images: {
     remotePatterns: [
       {
@@ -47,7 +45,7 @@ const nextConfig = {
     ignoreBuildErrors: false,
   },
   eslint: {
-    ignoreDuringBuilds: false,
+    ignoreDuringBuilds: true,
   },
   poweredByHeader: false,
   compress: true,

@@ -18,6 +18,7 @@ export interface GenerationRequest {
   seed?: number
   loraPath?: string
   loraStrength?: number
+  triggerWord?: string
 }
 
 export interface GenerationResult {

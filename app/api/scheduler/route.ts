@@ -546,14 +546,14 @@ async function updateSettings(settings: SchedulerSettings) {
   })
 }
 
-import { parseExpression } from "cron-parser"
+import parseExpression from "cron-parser"
 
 function calculateNextRun(schedule: string, lastRun?: string): string {
   try {
     const options = {
       currentDate: lastRun ? new Date(lastRun) : new Date(),
     }
-    const interval = parseExpression(schedule, options)
+    const interval = new (parseExpression as any)(schedule, options)
     return interval.next().toISOString()
   } catch (err) {
     console.error("Error parsing cron expression:", err)

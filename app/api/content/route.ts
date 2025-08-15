@@ -9,10 +9,26 @@ async function getContent() {
     const data = await fs.readFile(contentFilePath, "utf-8")
     return JSON.parse(data)
   } catch (error) {
-    if (error.code === "ENOENT") {
-      return []
+    // Type guard to safely check for file not found error
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return [] // File not found, return empty array
     }
-    throw error
+    throw error // Re-throw other errors
+  }
+}
+
+async function saveContent(content: any[]) {
+  try {
+    const data = JSON.stringify(content, null, 2)
+    await fs.writeFile(contentFilePath, data, "utf-8")
+  } catch (error) {
+    console.error("Failed to save content:", error)
+    throw new Error("Failed to save content.")
   }
 }
 

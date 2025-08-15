@@ -24,7 +24,13 @@ interface TrainingConfig {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { characterId, characterName, trainingImages = [], steps = 1000 } = body
+    const {
+      characterId,
+      characterName,
+      modelFile, // Added to receive the model file from the UI
+      trainingImages = [],
+      steps = 1000,
+    } = body
 
     if (!characterId) {
       return NextResponse.json({ error: "Character ID is required" }, { status: 400 })
@@ -33,7 +39,10 @@ export async function POST(request: NextRequest) {
     // Load character data
     let character = null
     try {
-      const charactersData = await readFile(join(process.cwd(), "data", "characters.json"), "utf-8")
+      const charactersData = await readFile(
+        join(process.cwd(), "data", "characters.json"),
+        "utf-8",
+      )
       const characters = JSON.parse(charactersData)
       character = characters.find((c: any) => c.id === characterId)
     } catch (error) {
@@ -43,18 +52,25 @@ export async function POST(request: NextRequest) {
     if (!character) {
       return NextResponse.json({ error: "Character not found" }, { status: 404 })
     }
-    if (!character.preferredModel) {
+
+    // Priority: 1. Model from request (body.modelFile), 2. Character's preferred model
+    const finalModelFile = modelFile || character.preferredModel
+    if (!finalModelFile) {
       return NextResponse.json(
-        { error: "Character does not have a preferredModel configured." },
+        {
+          error:
+            "No model specified in request and no preferredModel configured for character.",
+        },
         { status: 400 },
       )
     }
+
     const checkpointModelPath = join(
       process.cwd(),
       "ComfyUI",
       "models",
       "checkpoints",
-      character.preferredModel,
+      finalModelFile,
     )
 
     // This check is for a real environment. In the sandbox, it will fail.
@@ -191,6 +207,67 @@ function generateSampleImages(characterName: string) {
   return sampleImages;
 }
 
+// New function to handle Python environment setup in a cross-platform way
+async function setupPythonEnvironment(status: TrainingStatus): Promise<string> {
+  status.logs.push("🐍 Setting up Python environment (cross-platform)...");
+  const venvDir = join(process.cwd(), ".venv");
+  const pythonCommand = process.platform === "win32" ? "python" : "python3";
+
+  // 1. Create virtual environment if it doesn't exist
+  if (!existsSync(venvDir)) {
+    status.logs.push(`Creating Python virtual environment in ${venvDir}...`);
+    const venvProcess = spawn(pythonCommand, ["-m", "venv", venvDir], { stdio: "pipe" });
+    await new Promise<void>((resolve, reject) => {
+      venvProcess.stdout?.on('data', (data) => status.logs.push(`venv: ${data.toString().trim()}`));
+      venvProcess.stderr?.on('data', (data) => status.logs.push(`venv-err: ${data.toString().trim()}`));
+      venvProcess.on("close", (code) => {
+        if (code === 0) {
+          status.logs.push("✅ Virtual environment created.");
+          resolve();
+        } else {
+          reject(new Error(`Failed to create venv. Exit code: ${code}. Check if '${pythonCommand}' is installed and in your PATH.`));
+        }
+      });
+      venvProcess.on("error", (err) => reject(new Error(`Failed to spawn '${pythonCommand}': ${err.message}`)));
+    });
+  } else {
+    status.logs.push("👍 Virtual environment already exists.");
+  }
+
+  // 2. Install dependencies
+  const isWindows = process.platform === "win32";
+  const pipPath = join(venvDir, isWindows ? "Scripts" : "bin", "pip");
+  const pythonPath = join(venvDir, isWindows ? "Scripts" : "bin", isWindows ? "python.exe" : "python");
+
+  const requirements = [
+    "torch==2.1.0",
+    "diffusers==0.24.0",
+    "transformers==4.35.2",
+    "peft==0.7.1",
+    "safetensors==0.4.0",
+    "accelerate==0.25.0",
+  ];
+
+  status.logs.push(`📦 Installing dependencies using ${pipPath}...`);
+  const pipProcess = spawn(pipPath, ["install", ...requirements], { stdio: "pipe" });
+  await new Promise<void>((resolve, reject) => {
+    pipProcess.stdout?.on('data', (data) => status.logs.push(`pip: ${data.toString().trim()}`));
+    pipProcess.stderr?.on('data', (data) => status.logs.push(`pip-err: ${data.toString().trim()}`));
+    pipProcess.on("close", (code) => {
+      if (code === 0) {
+        status.logs.push("✅ Dependencies installed successfully.");
+        resolve();
+      } else {
+        reject(new Error(`Failed to install dependencies with pip. Exit code: ${code}`));
+      }
+    });
+    pipProcess.on("error", (err) => reject(new Error(`Failed to spawn '${pipPath}': ${err.message}`)));
+  });
+
+  status.logs.push("✅ Python environment is ready.");
+  return pythonPath;
+}
+
 async function startTrainingProcess(trainingId: string, config: TrainingConfig) {
   const status = trainingStatuses.get(trainingId)
   if (!status) return
@@ -217,31 +294,9 @@ async function startTrainingProcess(trainingId: string, config: TrainingConfig) 
     status.logs.push("🚀 Starting LoRA training process...")
 
     // Setup Python environment
-    status.logs.push("🐍 Setting up Python environment...")
-    const setupScriptPath = join(process.cwd(), "scripts", "setup_python_env.sh")
-    const setupProcess = spawn("bash", [setupScriptPath], { stdio: "pipe" })
-
-    setupProcess.stdout?.on("data", (data) => {
-      status.logs.push(`setup: ${data.toString().trim()}`)
-    })
-
-    setupProcess.stderr?.on("data", (data) => {
-      status.logs.push(`setup-error: ${data.toString().trim()}`)
-    })
-
-    await new Promise((resolve, reject) => {
-      setupProcess.on("close", (code) => {
-        if (code === 0) {
-          status.logs.push("✅ Python environment is ready.")
-          resolve(code)
-        } else {
-          reject(new Error(`Python environment setup failed with code ${code}`))
-        }
-      })
-    })
+    const pythonPath = await setupPythonEnvironment(status)
 
     // Use Python from virtual environment
-    const pythonPath = join(process.cwd(), ".venv", "bin", "python3")
     const trainingProcess = spawn(pythonPath, [scriptPath], {
       cwd: trainingDir,
       stdio: "pipe",
@@ -272,7 +327,8 @@ async function startTrainingProcess(trainingId: string, config: TrainingConfig) 
     })
 
     trainingProcess.on("close", (code) => {
-      handleTrainingComplete(trainingId, code)
+      // Handle null exit code by providing a default non-zero value
+      handleTrainingComplete(trainingId, code ?? 1)
     })
   } catch (error) {
     status.status = "failed"
@@ -355,11 +411,25 @@ async function prepareTrainingData(
   status.logs.push(`✅ Prepared ${config.trainingImages.length} training images`)
 }
 
+/**
+ * Escapes backslashes in a path for use in a Python string.
+ * @param path The path string to escape.
+ * @returns The escaped path string.
+ */
+function escapePathForPython(path: string): string {
+  return path.replace(/\\/g, "\\\\")
+}
+
 async function createTrainingScript(
   trainingDir: string,
   config: TrainingConfig,
 ): Promise<string> {
   const scriptPath = join(trainingDir, "train_lora.py")
+
+  // Correctly escape paths for Python on Windows
+  const checkpointModelPath = escapePathForPython(config.checkpointModelPath)
+  const instanceDir = escapePathForPython(join(trainingDir, "images"))
+  const outputDir = escapePathForPython(join(trainingDir, "output"))
 
   // New script with logic to load all components from a single local checkpoint
   const script = `#!/usr/bin/env python3
@@ -378,9 +448,9 @@ import time
 # --- Configuration ---
 # Using a standard repo for model CONFIGS ONLY, not weights
 BASE_CONFIG_REPO = "stabilityai/stable-diffusion-xl-base-1.0"
-CHECKPOINT_MODEL_PATH = "${config.checkpointModelPath.replace(/\\/g, "\\\\")}"
-INSTANCE_DIR = "${join(trainingDir, "images").replace(/\\/g, "\\\\")}"
-OUTPUT_DIR = "${join(trainingDir, "output").replace(/\\/g, "\\\\")}"
+CHECKPOINT_MODEL_PATH = r"${checkpointModelPath}"
+INSTANCE_DIR = r"${instanceDir}"
+OUTPUT_DIR = r"${outputDir}"
 TRIGGER_WORD = "${config.triggerWord}"
 STEPS = ${config.steps}
 LEARNING_RATE = ${config.learningRate}
@@ -596,7 +666,13 @@ function handleTrainingComplete(trainingId: string, code: number) {
   if (code === 0) {
     status.status = "completed"
     status.progress = 100
-    status.outputPath = join(process.cwd(), "training", trainingId, "output", `${status.id}.safetensors`)
+    status.outputPath = join(
+      process.cwd(),
+      "training",
+      trainingId,
+      "output",
+      `${status.id}.safetensors`,
+    )
     status.logs.push("✅ LoRA training completed successfully!")
     status.logs.push(`📁 Model saved to: ${status.outputPath}`)
   } else {
@@ -610,7 +686,8 @@ function handleTrainingComplete(trainingId: string, code: number) {
     const allTrainings = Array.from(trainingStatuses.entries())
     if (allTrainings.length > 10) {
       const sortedTrainings = allTrainings.sort(
-        (a, b) => new Date(b[1].startTime).getTime() - new Date(a[1].startTime).getTime(),
+        (a, b) =>
+          new Date(b[1].startTime).getTime() - new Date(a[1].startTime).getTime(),
       )
 
       // Remove old trainings

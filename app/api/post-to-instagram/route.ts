@@ -1,6 +1,35 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { readFile } from "fs/promises"
-import { join } from "path"
+import { promises as fs } from "fs"
+import path from "path"
+
+const contentFilePath = path.join(process.cwd(), "data", "content.json")
+
+async function getContent() {
+  try {
+    const data = await fs.readFile(contentFilePath, "utf-8")
+    return JSON.parse(data)
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return []
+    }
+    throw error
+  }
+}
+
+async function saveContent(content: any[]) {
+  try {
+    const data = JSON.stringify(content, null, 2)
+    await fs.writeFile(contentFilePath, data, "utf-8")
+  } catch (error) {
+    console.error("Failed to save content:", error)
+    throw new Error("Failed to save content.")
+  }
+}
 
 interface Character {
   id: string
@@ -11,7 +40,7 @@ interface Character {
 
 async function loadCharacters(): Promise<Character[]> {
   try {
-    const data = await readFile(join(process.cwd(), "data", "characters.json"), "utf-8")
+    const data = await fs.readFile(path.join(process.cwd(), "data", "characters.json"), "utf-8")
     return JSON.parse(data)
   } catch (error) {
     console.error("Failed to load characters:", error)
@@ -66,8 +95,8 @@ export async function POST(request: NextRequest) {
     // Step 1: Upload image to Instagram
     const uploadResponse = await uploadImageToInstagram(imageBuffer, accessToken, accountId)
 
-    if (!uploadResponse.success) {
-      throw new Error(`Image upload failed: ${uploadResponse.error}`)
+    if (!uploadResponse.success || !uploadResponse.creationId) {
+      throw new Error(`Image upload failed: ${uploadResponse.error || "No creationId returned"}`)
     }
 
     console.log("✅ Image uploaded successfully, creation_id:", uploadResponse.creationId)
@@ -116,7 +145,13 @@ async function uploadImageToInstagram(
   try {
     // Convert buffer to form data
     const formData = new FormData()
-    const blob = new Blob([imageBuffer], { type: "image/jpeg" })
+    // The Blob constructor is strict; ensure we have a clean ArrayBuffer.
+    const arrayBuffer = new ArrayBuffer(imageBuffer.length)
+    const view = new Uint8Array(arrayBuffer)
+    for (let i = 0; i < imageBuffer.length; ++i) {
+      view[i] = imageBuffer[i]
+    }
+    const blob = new Blob([arrayBuffer], { type: "image/jpeg" })
     formData.append("image", blob, "image.jpg")
     formData.append("access_token", accessToken)
 

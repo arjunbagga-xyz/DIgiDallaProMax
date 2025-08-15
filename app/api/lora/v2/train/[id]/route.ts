@@ -3,10 +3,10 @@ import { trainingStatuses } from "@/lib/training-store"
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } },
 ) {
   try {
-    const trainingId = params.id
+    const { id: trainingId } = context.params;
     const status = trainingStatuses.get(trainingId)
 
     if (!status) {

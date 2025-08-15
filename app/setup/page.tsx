@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle, XCircle, RefreshCw } from "lucide-react"
@@ -131,21 +132,21 @@ export default function SetupPage() {
               <div className="space-y-2">
                 <h4 className="font-medium">2. Character Setup</h4>
                 <p className="text-sm text-gray-600">Create and configure your AI characters</p>
-                <a href="/#characters">
+                <Link href="/#characters">
                   <Button size="sm" variant="outline">
                     Manage Characters
                   </Button>
-                </a>
+                </Link>
               </div>
 
               <div className="space-y-2">
                 <h4 className="font-medium">3. Instagram Accounts</h4>
                 <p className="text-sm text-gray-600">Connect Instagram business accounts</p>
-                <a href="/#monitoring">
+                <Link href="/#monitoring">
                   <Button size="sm" variant="outline">
                     Setup Instagram
                   </Button>
-                </a>
+                </Link>
               </div>
             </CardContent>
           </Card>
@@ -159,29 +160,29 @@ export default function SetupPage() {
               <div className="p-3 border rounded-lg">
                 <div className="font-medium mb-1">Local + GitHub Actions</div>
                 <div className="text-sm text-gray-600 mb-2">Recommended: Local primary, cloud backup</div>
-                <a href="/#deployment">
+                <Link href="/#deployment">
                   <Button size="sm">Deploy Hybrid</Button>
-                </a>
+                </Link>
               </div>
 
               <div className="p-3 border rounded-lg">
                 <div className="font-medium mb-1">Local Only</div>
                 <div className="text-sm text-gray-600 mb-2">Full control, unlimited generation</div>
-                <a href="/#deployment">
+                <Link href="/#deployment">
                   <Button size="sm" variant="outline">
                     Start Local
                   </Button>
-                </a>
+                </Link>
               </div>
 
               <div className="p-3 border rounded-lg">
                 <div className="font-medium mb-1">Cloud Only</div>
                 <div className="text-sm text-gray-600 mb-2">GitHub Actions serverless</div>
-                <a href="/#deployment">
+                <Link href="/#deployment">
                   <Button size="sm" variant="outline">
                     Deploy Cloud
                   </Button>
-                </a>
+                </Link>
               </div>
             </CardContent>
           </Card>

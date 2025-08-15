@@ -25,6 +25,7 @@ export interface WorkflowConfig {
   loraStrength?: number
   sampler?: string
   scheduler?: string
+  triggerWord?: string
 }
 
 export type Workflow = Record<string, WorkflowNode>
@@ -40,7 +41,13 @@ export function createFluxWorkflow(modelName: string, prompt: string, config: Pa
     loraStrength = 1.0,
     sampler = "euler",
     scheduler = "simple",
+    triggerWord,
   } = config
+
+  let finalPrompt = prompt
+  if (loraPath && triggerWord) {
+    finalPrompt = `${triggerWord}, ${prompt}`
+  }
 
   const workflow: Workflow = {
     "1": {
@@ -54,7 +61,7 @@ export function createFluxWorkflow(modelName: string, prompt: string, config: Pa
     },
     "2": {
       inputs: {
-        text: prompt,
+        text: finalPrompt,
         clip: ["1", 1],
       },
       class_type: "CLIPTextEncode",
@@ -149,7 +156,13 @@ export function createSDXLWorkflow(modelName: string, prompt: string, config: Pa
     loraStrength = 1.0,
     sampler = "dpmpp_2m",
     scheduler = "karras",
+    triggerWord,
   } = config
+
+  let finalPrompt = prompt
+  if (loraPath && triggerWord) {
+    finalPrompt = `${triggerWord}, ${prompt}`
+  }
 
   const workflow: Workflow = {
     "1": {
@@ -163,7 +176,7 @@ export function createSDXLWorkflow(modelName: string, prompt: string, config: Pa
     },
     "2": {
       inputs: {
-        text: prompt,
+        text: finalPrompt,
         clip: ["1", 1],
       },
       class_type: "CLIPTextEncode",
@@ -269,7 +282,13 @@ export function createSD15Workflow(modelName: string, prompt: string, config: Pa
     loraStrength = 1.0,
     sampler = "euler_a",
     scheduler = "normal",
+    triggerWord,
   } = config
+
+  let finalPrompt = prompt
+  if (loraPath && triggerWord) {
+    finalPrompt = `${triggerWord}, ${prompt}`
+  }
 
   // Hires fix specific settings
   const upscaleFactor = 2
@@ -288,7 +307,7 @@ export function createSD15Workflow(modelName: string, prompt: string, config: Pa
     },
     "2": {
       inputs: {
-        text: prompt,
+        text: finalPrompt,
         clip: ["1", 1],
       },
       class_type: "CLIPTextEncode",
