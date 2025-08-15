@@ -500,7 +500,7 @@ class DreamBoothDataset(Dataset):
         except FileNotFoundError:
             print(f"WARNING: Caption file not found for {os.path.basename(image_path)}. Using trigger word as caption.")
             caption = TRIGGER_WORD
-
+        
         example["instance_prompt"] = caption
         return example
 
@@ -524,7 +524,7 @@ def main():
     )
     pipe.to(device)
     print("✅ Pipeline loaded.")
-
+    
     # Extract components
     vae = pipe.vae
     text_encoder_one = pipe.text_encoder
@@ -543,7 +543,7 @@ def main():
     # Add LoRA to UNet
     unet_lora_config = LoraConfig(r=NETWORK_DIM, lora_alpha=NETWORK_ALPHA, init_lora_weights="gaussian", target_modules=["to_q", "to_k", "to_v", "to_out.0", "proj_in", "proj_out"])
     unet.add_adapter(unet_lora_config, adapter_name="lora_adapter")
-
+    
     # Add LoRA to Text Encoders if enabled
     if TRAIN_TEXT_ENCODER:
         text_lora_config = LoraConfig(r=NETWORK_DIM, lora_alpha=NETWORK_ALPHA, init_lora_weights="gaussian", target_modules=["q_proj", "k_proj", "v_proj", "out_proj"])
@@ -562,16 +562,16 @@ def main():
 
     # Dataset and DataLoader
     train_dataset = DreamBoothDataset(INSTANCE_DIR, tokenizer_one, tokenizer_two, size=RESOLUTION)
-
+    
     def collate_fn(examples):
         pixel_values = torch.stack([example["instance_images"] for example in examples])
         pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
         prompts = [example["instance_prompt"] for example in examples]
-
+        
         # Tokenize and encode prompts
         tokenizers = [tokenizer_one, tokenizer_two]
         text_encoders = [text_encoder_one, text_encoder_two]
-
+        
         prompt_embeds_list = []
         for tokenizer, text_encoder in zip(tokenizers, text_encoders):
             text_inputs = tokenizer(
@@ -587,7 +587,7 @@ def main():
             prompt_embeds_list.append(prompt_embeds)
 
         prompt_embeds = torch.cat(prompt_embeds_list, dim=-1)
-
+        
         return {
             "pixel_values": pixel_values.to(device, dtype=torch.float16),
             "prompt_embeds": prompt_embeds.to(device, dtype=torch.float16),
@@ -618,7 +618,7 @@ def main():
         noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
         add_time_ids = torch.tensor([RESOLUTION, RESOLUTION, 0, 0, RESOLUTION, RESOLUTION], device=device, dtype=torch.float16).repeat(bsz, 1)
-
+        
         added_cond_kwargs = {"text_embeds": batch["pooled_prompt_embeds"], "time_ids": add_time_ids}
 
         model_pred = unet(noisy_latents, timesteps, batch["prompt_embeds"], added_cond_kwargs=added_cond_kwargs).sample
@@ -631,7 +631,7 @@ def main():
             raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
 
         loss = torch.nn.functional.mse_loss(model_pred.float(), target.float(), reduction="mean")
-
+        
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
@@ -647,7 +647,7 @@ def main():
     # Save LoRA layers
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     unet_lora_layers = unet.state_dict(prefix="unet.")
-
+    
     if TRAIN_TEXT_ENCODER:
         text_encoder_one_lora_layers = text_encoder_one.state_dict(prefix="text_encoder_l.")
         text_encoder_two_lora_layers = text_encoder_two.state_dict(prefix="text_encoder_2.")
