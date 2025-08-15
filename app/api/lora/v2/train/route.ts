@@ -75,8 +75,13 @@ export async function POST(request: NextRequest) {
 
     // This check is for a real environment. In the sandbox, it will fail.
     if (!existsSync(checkpointModelPath)) {
-      console.warn(
-        `WARNING: Checkpoint model not found at path: ${checkpointModelPath}. The training will likely fail if this path is incorrect in a real environment.`,
+      // Immediately fail the request if the model doesn't exist.
+      return NextResponse.json(
+        {
+          error: "Base model file not found.",
+          details: `The required checkpoint model '${finalModelFile}' was not found at the expected path: ${checkpointModelPath}. Please make sure the model exists in the 'models/checkpoints' directory.`,
+        },
+        { status: 400 },
       )
     }
 
@@ -431,23 +436,22 @@ async function createTrainingScript(
   const instanceDir = escapePathForPython(join(trainingDir, "images"))
   const outputDir = escapePathForPython(join(trainingDir, "output"))
 
-  // New script with logic to load all components from a single local checkpoint
+  // New, corrected script for SDXL LoRA training
   const script = `#!/usr/bin/env python3
 import os
 import sys
 import torch
-from safetensors.torch import load_file
-from diffusers import UNet2DConditionModel, DDPMScheduler, AutoencoderKL
-from transformers import CLIPTextModel, CLIPTokenizer, CLIPTextConfig, CLIPVisionConfig
+import itertools
+from diffusers import StableDiffusionXLPipeline, UNet2DConditionModel, DDPMScheduler
+from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
 from peft import LoraConfig, get_peft_model
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
-import time
+from safetensors.torch import save_file
+import traceback
 
 # --- Configuration ---
-# Using a standard repo for model CONFIGS ONLY, not weights
-BASE_CONFIG_REPO = "stabilityai/stable-diffusion-xl-base-1.0"
 CHECKPOINT_MODEL_PATH = r"${checkpointModelPath}"
 INSTANCE_DIR = r"${instanceDir}"
 OUTPUT_DIR = r"${outputDir}"
@@ -459,24 +463,14 @@ RESOLUTION = ${config.resolution}
 NETWORK_DIM = ${config.networkDim}
 NETWORK_ALPHA = ${config.networkAlpha}
 OUTPUT_NAME = "${config.outputName}"
-
-# --- Helper Functions ---
-def get_state_dict_from_checkpoint(checkpoint_path, key_prefix):
-    print(f"Filtering state dict for prefix: {key_prefix}")
-    checkpoint_state_dict = load_file(checkpoint_path, device="cpu")
-    filtered_state_dict = {}
-    for k, v in checkpoint_state_dict.items():
-        if k.startswith(key_prefix):
-            filtered_state_dict[k.replace(key_prefix, "")] = v
-    if not filtered_state_dict:
-        print(f"⚠️ WARNING: No keys found with prefix '{key_prefix}'. The component may not load correctly.")
-    return filtered_state_dict
+TRAIN_TEXT_ENCODER = True # SDXL benefits greatly from this
 
 # --- Dataset ---
 class DreamBoothDataset(Dataset):
-    def __init__(self, instance_data_root, tokenizer, size=512):
+    def __init__(self, instance_data_root, tokenizer, tokenizer_2, size=1024):
         self.instance_data_root = instance_data_root
         self.tokenizer = tokenizer
+        self.tokenizer_2 = tokenizer_2
         self.size = size
         self.instance_images_path = [os.path.join(instance_data_root, f) for f in os.listdir(instance_data_root) if f.endswith(('.png', '.jpg', '.jpeg'))]
         self.num_instance_images = len(self.instance_images_path)
@@ -507,68 +501,59 @@ class DreamBoothDataset(Dataset):
             print(f"WARNING: Caption file not found for {os.path.basename(image_path)}. Using trigger word as caption.")
             caption = TRIGGER_WORD
 
-        example["instance_prompt_ids"] = self.tokenizer(
-            caption,
-            truncation=True,
-            padding="max_length",
-            max_length=self.tokenizer.model_max_length,
-            return_tensors="pt",
-        ).input_ids
+        example["instance_prompt"] = caption
         return example
 
 # --- Main Training Logic ---
 def main():
-    print("--- Initializing LoRA Training from single checkpoint ---")
+    print("--- Initializing SDXL LoRA Training from single checkpoint ---")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
 
     if not os.path.exists(CHECKPOINT_MODEL_PATH):
         print(f"❌ ERROR: Checkpoint file not found at {CHECKPOINT_MODEL_PATH}")
         sys.exit(1)
 
-    # Load Tokenizer from base config repo
-    print(f"Loading tokenizer from {BASE_CONFIG_REPO}...")
-    tokenizer = CLIPTokenizer.from_pretrained(BASE_CONFIG_REPO, subfolder="tokenizer")
+    # Load the entire pipeline from a single file
+    print("Loading pipeline...")
+    pipe = StableDiffusionXLPipeline.from_single_file(
+        CHECKPOINT_MODEL_PATH,
+        torch_dtype=torch.float16,
+        use_safetensors=True,
+        variant="fp16"
+    )
+    pipe.to(device)
+    print("✅ Pipeline loaded.")
 
-    # Load VAE from checkpoint
-    print("Loading VAE...")
-    vae_config = AutoencoderKL.load_config(BASE_CONFIG_REPO, subfolder="vae")
-    vae = AutoencoderKL.from_config(vae_config)
-    vae_state_dict = get_state_dict_from_checkpoint(CHECKPOINT_MODEL_PATH, "first_stage_model.")
-    vae.load_state_dict(vae_state_dict, strict=False)
-    print("✅ VAE loaded from checkpoint.")
+    # Extract components
+    vae = pipe.vae
+    text_encoder_one = pipe.text_encoder
+    text_encoder_two = pipe.text_encoder_2
+    tokenizer_one = pipe.tokenizer
+    tokenizer_two = pipe.tokenizer_2
+    unet = pipe.unet
+    noise_scheduler = DDPMScheduler.from_config(pipe.scheduler.config)
 
-    # Load Text Encoder from checkpoint
-    print("Loading Text Encoder...")
-    text_encoder_config = CLIPTextConfig.from_pretrained(BASE_CONFIG_REPO, subfolder="text_encoder")
-    text_encoder = CLIPTextModel(text_encoder_config)
-    text_encoder_state_dict = get_state_dict_from_checkpoint(CHECKPOINT_MODEL_PATH, "cond_stage_model.model.transformer.text_model.")
-    text_encoder.load_state_dict(text_encoder_state_dict, strict=False)
-    print("✅ Text Encoder loaded from checkpoint.")
-
-    # Load UNet from checkpoint
-    print("Loading UNet...")
-    unet_config = UNet2DConditionModel.load_config(BASE_CONFIG_REPO, subfolder="unet")
-    unet = UNet2DConditionModel.from_config(unet_config)
-    unet_state_dict = get_state_dict_from_checkpoint(CHECKPOINT_MODEL_PATH, "model.diffusion_model.")
-    unet.load_state_dict(unet_state_dict, strict=False)
-    print("✅ UNet loaded from checkpoint.")
+    # Freeze models
+    vae.requires_grad_(False)
+    text_encoder_one.requires_grad_(False)
+    text_encoder_two.requires_grad_(False)
+    unet.requires_grad_(False)
 
     # Add LoRA to UNet
-    lora_config = LoraConfig(
-        r=NETWORK_DIM,
-        lora_alpha=NETWORK_ALPHA,
-        target_modules=["to_q", "to_k", "to_v", "to_out.0", "proj_in", "proj_out"],
-        lora_dropout=0.05,
-        bias="none",
-    )
-    unet = get_peft_model(unet, lora_config)
+    unet_lora_config = LoraConfig(r=NETWORK_DIM, lora_alpha=NETWORK_ALPHA, init_lora_weights="gaussian", target_modules=["to_q", "to_k", "to_v", "to_out.0", "proj_in", "proj_out"])
+    unet.add_adapter(unet_lora_config, adapter_name="lora_adapter")
 
-    # Freeze other models
-    vae.requires_grad_(False)
-    text_encoder.requires_grad_(False)
+    # Add LoRA to Text Encoders if enabled
+    if TRAIN_TEXT_ENCODER:
+        text_lora_config = LoraConfig(r=NETWORK_DIM, lora_alpha=NETWORK_ALPHA, init_lora_weights="gaussian", target_modules=["q_proj", "k_proj", "v_proj", "out_proj"])
+        text_encoder_one.add_adapter(text_lora_config, adapter_name="lora_adapter")
+        text_encoder_two.add_adapter(text_lora_config, adapter_name="lora_adapter")
 
     # Optimizer
+    params_to_optimize = itertools.chain(unet.parameters(), text_encoder_one.parameters(), text_encoder_two.parameters()) if TRAIN_TEXT_ENCODER else unet.parameters()
     optimizer = torch.optim.AdamW(
-        unet.parameters(),
+        [p for p in params_to_optimize if p.requires_grad],
         lr=LEARNING_RATE,
         betas=(0.9, 0.999),
         weight_decay=1e-2,
@@ -576,67 +561,100 @@ def main():
     )
 
     # Dataset and DataLoader
-    train_dataset = DreamBoothDataset(INSTANCE_DIR, tokenizer, size=RESOLUTION)
-    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    train_dataset = DreamBoothDataset(INSTANCE_DIR, tokenizer_one, tokenizer_two, size=RESOLUTION)
 
-    # Training loop
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {device}")
-    unet.to(device)
-    vae.to(device)
-    text_encoder.to(device)
+    def collate_fn(examples):
+        pixel_values = torch.stack([example["instance_images"] for example in examples])
+        pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
+        prompts = [example["instance_prompt"] for example in examples]
 
-    noise_scheduler = DDPMScheduler.from_pretrained(BASE_CONFIG_REPO, subfolder="scheduler")
+        # Tokenize and encode prompts
+        tokenizers = [tokenizer_one, tokenizer_two]
+        text_encoders = [text_encoder_one, text_encoder_two]
+
+        prompt_embeds_list = []
+        for tokenizer, text_encoder in zip(tokenizers, text_encoders):
+            text_inputs = tokenizer(
+                prompts,
+                padding="max_length",
+                max_length=tokenizer.model_max_length,
+                truncation=True,
+                return_tensors="pt",
+            )
+            prompt_embeds = text_encoder(text_inputs.input_ids.to(device), output_hidden_states=True)
+            pooled_prompt_embeds = prompt_embeds[0]
+            prompt_embeds = prompt_embeds.hidden_states[-2]
+            prompt_embeds_list.append(prompt_embeds)
+
+        prompt_embeds = torch.cat(prompt_embeds_list, dim=-1)
+
+        return {
+            "pixel_values": pixel_values.to(device, dtype=torch.float16),
+            "prompt_embeds": prompt_embeds.to(device, dtype=torch.float16),
+            "pooled_prompt_embeds": pooled_prompt_embeds.to(device, dtype=torch.float16)
+        }
+
+    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_fn)
 
     print(f"🚀 Starting training for {STEPS} steps...")
     global_step = 0
+    progress_bar = range(STEPS)
 
-    for epoch in range(int(STEPS / len(train_dataloader)) + 1):
+    for step in progress_bar:
         unet.train()
-        for step, batch in enumerate(train_dataloader):
-            if global_step >= STEPS:
-                break
+        if TRAIN_TEXT_ENCODER:
+            text_encoder_one.train()
+            text_encoder_two.train()
 
-            with torch.no_grad():
-                latents = vae.encode(batch["instance_images"].to(device, dtype=torch.float32)).latent_dist.sample()
-                latents = latents * vae.config.scaling_factor
+        batch = next(iter(train_dataloader))
 
-            noise = torch.randn_like(latents)
-            bsz = latents.shape[0]
-            timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device).long()
+        with torch.no_grad():
+            latents = vae.encode(batch["pixel_values"]).latent_dist.sample()
+            latents = latents * vae.config.scaling_factor
 
-            noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+        noise = torch.randn_like(latents)
+        bsz = latents.shape[0]
+        timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device).long()
+        noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
-            with torch.no_grad():
-                encoder_hidden_states = text_encoder(batch["instance_prompt_ids"].squeeze(1).to(device))[0]
+        add_time_ids = torch.tensor([RESOLUTION, RESOLUTION, 0, 0, RESOLUTION, RESOLUTION], device=device, dtype=torch.float16).repeat(bsz, 1)
 
-            model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
+        added_cond_kwargs = {"text_embeds": batch["pooled_prompt_embeds"], "time_ids": add_time_ids}
 
-            if noise_scheduler.config.prediction_type == "epsilon":
-                target = noise
-            elif noise_scheduler.config.prediction_type == "v_prediction":
-                target = noise_scheduler.get_velocity(latents, noise, timesteps)
-            else:
-                raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
+        model_pred = unet(noisy_latents, timesteps, batch["prompt_embeds"], added_cond_kwargs=added_cond_kwargs).sample
 
-            loss = torch.nn.functional.mse_loss(model_pred.float(), target.float(), reduction="mean")
+        if noise_scheduler.config.prediction_type == "epsilon":
+            target = noise
+        elif noise_scheduler.config.prediction_type == "v_prediction":
+            target = noise_scheduler.get_velocity(latents, noise, timesteps)
+        else:
+            raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
 
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
+        loss = torch.nn.functional.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
-            global_step += 1
-            print(f"Step {global_step}/{STEPS} - Loss: {loss.item():.4f}")
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+
+        global_step += 1
+        print(f"Step {global_step}/{STEPS} - Loss: {loss.item():.4f}")
+
+        if global_step >= STEPS:
+            break
 
     print("✅ Training complete!")
 
-    # Save LoRA model
+    # Save LoRA layers
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    unet.save_pretrained(OUTPUT_DIR)
+    unet_lora_layers = unet.state_dict(prefix="unet.")
 
-    from safetensors.torch import save_file
+    if TRAIN_TEXT_ENCODER:
+        text_encoder_one_lora_layers = text_encoder_one.state_dict(prefix="text_encoder_l.")
+        text_encoder_two_lora_layers = text_encoder_two.state_dict(prefix="text_encoder_2.")
+        lora_layers = {**unet_lora_layers, **text_encoder_one_lora_layers, **text_encoder_two_lora_layers}
+    else:
+        lora_layers = unet_lora_layers
 
-    lora_layers = unet.state_dict()
     final_lora_path = os.path.join(OUTPUT_DIR, f"{OUTPUT_NAME}.safetensors")
     save_file(lora_layers, final_lora_path)
 
@@ -648,7 +666,6 @@ if __name__ == "__main__":
         sys.exit(0)
     except Exception as e:
         print(f"❌ Training failed: {e}")
-        import traceback
         traceback.print_exc()
         sys.exit(1)
 `
