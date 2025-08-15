@@ -65,9 +65,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Construct the checkpoint model path - directly use models/checkpoints without ComfyUI prefix
     const checkpointModelPath = join(
       process.cwd(),
-      "ComfyUI",
       "models",
       "checkpoints",
       finalModelFile,
@@ -240,7 +240,7 @@ async function setupPythonEnvironment(status: TrainingStatus): Promise<string> {
   const pythonPath = join(venvDir, isWindows ? "Scripts" : "bin", isWindows ? "python.exe" : "python");
 
   const requirements = [
-    "torch==2.1.0",
+    "torch>=2.1.0",
     "diffusers==0.24.0",
     "transformers==4.35.2",
     "peft==0.7.1",
