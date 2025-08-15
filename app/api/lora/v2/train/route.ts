@@ -378,9 +378,9 @@ import time
 # --- Configuration ---
 # Using a standard repo for model CONFIGS ONLY, not weights
 BASE_CONFIG_REPO = "stabilityai/stable-diffusion-xl-base-1.0"
-CHECKPOINT_MODEL_PATH = "${config.checkpointModelPath}"
-INSTANCE_DIR = "${join(trainingDir, "images")}"
-OUTPUT_DIR = "${join(trainingDir, "output")}"
+CHECKPOINT_MODEL_PATH = "${config.checkpointModelPath.replace(/\\/g, "\\\\")}"
+INSTANCE_DIR = "${join(trainingDir, "images").replace(/\\/g, "\\\\")}"
+OUTPUT_DIR = "${join(trainingDir, "output").replace(/\\/g, "\\\\")}"
 TRIGGER_WORD = "${config.triggerWord}"
 STEPS = ${config.steps}
 LEARNING_RATE = ${config.learningRate}
