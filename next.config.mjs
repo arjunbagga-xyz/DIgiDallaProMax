@@ -53,6 +53,15 @@ const nextConfig = {
   httpAgentOptions: {
     keepAlive: true,
   },
+  watchOptions: {
+    ignored: [
+      '**/training/**',
+      '**/.#*',
+      '**/*.pyc',
+      '**/.git/**',
+      '**/node_modules/**',
+    ],
+  },
 }
 
 export default nextConfig
