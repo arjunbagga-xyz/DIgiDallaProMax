@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -241,6 +241,32 @@ export default function AutomationDashboard() {
   const [allContent, setAllContent] = useState<Content[]>([])
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null)
   const [selectedTraining, setSelectedTraining] = useState<TrainingStatus | null>(null)
+  const prevTrainingsRef = useRef<TrainingStatus[]>()
+
+  useEffect(() => {
+    // Check for newly failed trainings
+    if (prevTrainingsRef.current) {
+      trainings.forEach((training) => {
+        const prevTraining = prevTrainingsRef.current.find((t) => t.id === training.id)
+        if (prevTraining && prevTraining.status !== "failed" && training.status === "failed") {
+          toast({
+            title: "Training Failed",
+            description: `LoRA training for ${
+              characters.find((c) => c.id === training.characterId)?.name || "Unknown"
+            } has failed.`,
+            variant: "destructive",
+            action: (
+              <Button variant="secondary" size="sm" onClick={() => viewTrainingDetails(training.id)}>
+                View Logs
+              </Button>
+            ),
+          })
+        }
+      })
+    }
+    // Update the ref with the current trainings for the next render
+    prevTrainingsRef.current = trainings
+  }, [trainings, characters])
 
   const viewTrainingDetails = async (trainingId: string) => {
     try {
