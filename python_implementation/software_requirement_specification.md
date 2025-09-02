@@ -36,7 +36,7 @@ The system shall allow users to perform Create, Read, Update, and Delete (CRUD) 
 The system shall be able to generate images using a connected ComfyUI instance.
 
 *   **Model Selection**: The system will fetch a list of available checkpoint models from the ComfyUI server via a `GET /api/models` endpoint. The user will be able to select a model from this list for image generation.
-*   **Dynamic Workflows**: The system will dynamically construct the appropriate ComfyUI workflow (for SDXL, SD1.5, or FLUX models) based on the selected model and user parameters.
+*   **Dynamic Workflows**: The system will dynamically construct the appropriate ComfyUI workflow based on the selected model and user parameters.
 *   **LoRA Integration**: The system shall support the use of LoRA (Low-Rank Adaptation) models to generate images that are consistent with a specific character's appearance. The available LoRAs will also be fetched from the ComfyUI server.
 *   **API Endpoint**: Image generation will be exposed through a `POST /api/generate-image` endpoint.
 
