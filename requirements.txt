@@ -8,3 +8,5 @@ peft
 accelerate
 transformers
 bitsandbytes
+tweepy
+google-generativeai

@@ -3,6 +3,7 @@
 import os
 import json
 import random
+import requests
 from flask import Flask, request, jsonify
 from datetime import datetime
 import uuid
@@ -36,11 +37,63 @@ from apscheduler.triggers.cron import CronTrigger
 
 scheduler = BackgroundScheduler()
 
-def placeholder_task(task_id):
-    """A placeholder function for scheduled jobs."""
-    print(f"Executing scheduled task: {task_id}")
-    # In the future, this will trigger the actual generate/post logic
-    pass
+def execute_scheduled_task(task_id):
+    """The main function executed by the scheduler."""
+    print(f"--- Running scheduled task: {task_id} ---")
+    tasks = load_schedule()
+    task = next((t for t in tasks if t['id'] == task_id), None)
+    if not task:
+        print(f"ERROR: Task {task_id} not found in schedule.json")
+        return
+
+    characters = load_characters()
+    character = next((c for c in characters if c['id'] == task['characterId']), None)
+    if not character:
+        print(f"ERROR: Character {task['characterId']} not found for task {task_id}")
+        return
+
+    try:
+        # 1. Generate a prompt (simplified)
+        prompt = f"A dramatic portrait of {character['name']}, {character['personality']}"
+        print(f"Generated prompt: {prompt}")
+
+        # 2. Generate an image
+        image_payload = {
+            "prompt": prompt,
+            "model": character.get("preferredModel", "runwayml/stable-diffusion-v1-5")
+        }
+        image_url = _run_image_generation_sync(image_payload)
+        print(f"Generated image URL: {image_url}")
+
+        # 3. Generate a caption
+        caption = "Default caption."
+        try:
+            caption_payload = {"prompt": prompt, "character": character}
+            caption = _generate_caption_logic(caption_payload)
+            print(f"Generated caption: {caption}")
+        except Exception as e:
+            print(f"Could not generate caption: {e}")
+
+        # 4. Post to social media
+        if task.get('type') == 'generate_and_post':
+            try:
+                post_payload = {"characterId": character['id'], "imageUrl": image_url, "caption": caption}
+                _post_to_instagram_logic(post_payload)
+                print("Posted to Instagram successfully.")
+            except Exception as e:
+                print(f"Failed to post to Instagram: {e}")
+
+            try:
+                post_payload = {"characterId": character['id'], "imageUrl": image_url, "caption": caption}
+                _post_to_twitter_logic(post_payload)
+                print("Posted to Twitter successfully.")
+            except Exception as e:
+                print(f"Failed to post to Twitter: {e}")
+
+        print("--- Task execution finished ---")
+
+    except Exception as e:
+        print(f"ERROR executing task {task_id}: {e}")
 
 def load_schedule():
     schedule_file = os.path.join(DATA_DIR, "schedule.json")
@@ -60,7 +113,7 @@ def initialize_scheduler():
     for task in tasks:
         if task.get('active', True):
             scheduler.add_job(
-                placeholder_task,
+                execute_scheduled_task,
                 CronTrigger.from_crontab(task['schedule']),
                 id=task['id'],
                 args=[task['id']]
@@ -99,7 +152,7 @@ def add_task():
     save_schedule(tasks)
 
     scheduler.add_job(
-        placeholder_task,
+        execute_scheduled_task,
         CronTrigger.from_crontab(new_task['schedule']),
         id=new_task['id'],
         args=[new_task['id']]
@@ -150,37 +203,82 @@ def update_task(task_id):
 
     return jsonify({"success": True})
 
+def _post_to_instagram_logic(payload):
+    characters = load_characters()
+    character = next((c for c in characters if c['id'] == payload['characterId']), None)
+    if not character:
+        raise ValueError("Character not found")
+
+    access_token = character.get("instagramApiKey", "YOUR_INSTAGRAM_API_KEY")
+    account_id = character.get("instagramAccountId", "YOUR_INSTAGRAM_ACCOUNT_ID")
+
+    if "YOUR_" in access_token or "YOUR_" in account_id:
+        raise ValueError("Instagram API keys not configured for this character.")
+
+    # Step 1: Upload image
+    upload_url = f"https://graph.facebook.com/v18.0/{account_id}/media"
+    upload_payload = {
+        'image_url': payload['imageUrl'],
+        'caption': payload['caption'],
+        'access_token': access_token
+    }
+    upload_res = requests.post(upload_url, data=upload_payload)
+    upload_res.raise_for_status()
+    creation_id = upload_res.json()['id']
+
+    # Step 2: Publish
+    publish_url = f"https://graph.facebook.com/v18.0/{account_id}/media_publish"
+    publish_payload = {'creation_id': creation_id, 'access_token': access_token}
+    publish_res = requests.post(publish_url, data=publish_payload)
+    publish_res.raise_for_status()
+    return publish_res.json()['id']
+
 @app.route('/api/post-to-instagram', methods=['POST'])
 def post_to_instagram():
-    # Placeholder implementation
-    data = request.get_json()
-    if not data or not all(k in data for k in ['characterId', 'imageUrl', 'caption']):
-        return jsonify({"error": "characterId, imageUrl, and caption are required"}), 400
+    try:
+        post_id = _post_to_instagram_logic(request.get_json())
+        return jsonify({"success": True, "postId": post_id})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    print(f"Simulating post to Instagram for character {data['characterId']}")
-    print(f"Caption: {data['caption']}")
 
-    return jsonify({
-        "success": True,
-        "postId": f"insta_{uuid.uuid4().hex}",
-        "message": "Successfully posted to Instagram (simulation)."
-    })
+def _post_to_twitter_logic(payload):
+    import tweepy
+
+    characters = load_characters()
+    character = next((c for c in characters if c['id'] == payload['characterId']), None)
+    if not character:
+        raise ValueError("Character not found")
+
+    consumer_key = character.get("twitterAppKey", "YOUR_TWITTER_APP_KEY")
+    consumer_secret = character.get("twitterAppSecret", "YOUR_TWITTER_APP_SECRET")
+    access_token = character.get("twitterAccessToken", "YOUR_TWITTER_ACCESS_TOKEN")
+    access_token_secret = character.get("twitterAccessSecret", "YOUR_TWITTER_ACCESS_SECRET")
+
+    if "YOUR_" in consumer_key:
+        raise ValueError("Twitter API keys not configured for this character.")
+
+    client = tweepy.Client(
+        consumer_key=consumer_key, consumer_secret=consumer_secret,
+        access_token=access_token, access_token_secret=access_token_secret
+    )
+    auth = tweepy.OAuth1UserHandler(consumer_key, consumer_secret, access_token, access_token_secret)
+    api = tweepy.API(auth)
+
+    image_res = requests.get(payload['imageUrl'], stream=True)
+    image_res.raise_for_status()
+    media = api.media_upload(filename="image.jpg", file=image_res.raw)
+
+    tweet = client.create_tweet(text=payload['caption'], media_ids=[media.media_id_string])
+    return tweet.data['id']
 
 @app.route('/api/post-to-twitter', methods=['POST'])
 def post_to_twitter():
-    # Placeholder implementation
-    data = request.get_json()
-    if not data or not all(k in data for k in ['characterId', 'imageUrl', 'caption']):
-        return jsonify({"error": "characterId, imageUrl, and caption are required"}), 400
-
-    print(f"Simulating post to Twitter for character {data['characterId']}")
-    print(f"Caption: {data['caption']}")
-
-    return jsonify({
-        "success": True,
-        "postId": f"tweet_{uuid.uuid4().hex}",
-        "message": "Successfully posted to Twitter (simulation)."
-    })
+    try:
+        post_id = _post_to_twitter_logic(request.get_json())
+        return jsonify({"success": True, "postId": post_id})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # In-memory stores for tasks
 generation_tasks = {}
@@ -310,54 +408,60 @@ def create_comfy_workflow(prompt, model, seed):
         }
     }
 
-def _run_image_generation(task_id, payload):
+def _run_image_generation_sync(payload):
     import requests
     import time
 
+    prompt = payload['prompt']
+    model = payload['model']
+    seed = payload.get('seed', random.randint(0, 1_000_000_000))
+
+    workflow = create_comfy_workflow(prompt, model, seed)
+
+    p = {"prompt": workflow, "client_id": str(uuid.uuid4())}
+    data = json.dumps(p).encode('utf-8')
+    req = requests.post(f"{COMFYUI_URL}/prompt", data=data)
+    req.raise_for_status()
+    prompt_id = req.json()['prompt_id']
+
+    # Poll for result
+    while True:
+        with requests.get(f"{COMFYUI_URL}/history/{prompt_id}") as response:
+            history = response.json()
+            if prompt_id in history and history[prompt_id]['outputs']:
+                outputs = history[prompt_id]['outputs']
+                image_output = None
+                for node_id in outputs:
+                    if 'images' in outputs[node_id]:
+                        image_output = outputs[node_id]['images'][0]
+                        break
+
+                if image_output:
+                    # In a real app, we'd get the image URL or data. For now, we return a placeholder.
+                    # This is because the ComfyUI /view endpoint returns an image, not a URL to the image.
+                    # For a scheduler, we need a persistent URL.
+                    return f"{COMFYUI_URL}/view?filename={image_output['filename']}"
+                else:
+                    raise Exception("No image output found in completed workflow")
+        time.sleep(2)
+
+
+def _run_image_generation_async(task_id, payload):
+    """Runs image generation and updates the in-memory task store."""
     generation_tasks[task_id] = {"status": "running", "result": None}
-
     try:
-        prompt = payload['prompt']
-        model = payload['model']
-        seed = payload.get('seed', random.randint(0, 1_000_000_000))
+        image_url = _run_image_generation_sync(payload)
+        filename = image_url.split('filename=')[1]
+        image_data, mime_type = _get_image_data(filename)
 
-        workflow = create_comfy_workflow(prompt, model, seed)
-
-        # Queue prompt
-        p = {"prompt": workflow, "client_id": str(uuid.uuid4())}
-        data = json.dumps(p).encode('utf-8')
-        req = requests.post(f"{COMFYUI_URL}/prompt", data=data)
-        prompt_id = req.json()['prompt_id']
-
-        # Poll for result
-        while True:
-            with requests.get(f"{COMFYUI_URL}/history/{prompt_id}") as response:
-                history = response.json()
-                if prompt_id in history and history[prompt_id]['outputs']:
-                    outputs = history[prompt_id]['outputs']
-                    # Find the image output
-                    image_output = None
-                    for node_id in outputs:
-                        if 'images' in outputs[node_id]:
-                            image_output = outputs[node_id]['images'][0]
-                            break
-
-                    if image_output:
-                        image_data, mime_type = _get_image_data(image_output['filename'])
-                        generation_tasks[task_id] = {
-                            "status": "completed",
-                            "result": {"image_data": image_data, "mime_type": mime_type}
-                        }
-                    else:
-                        raise Exception("No image output found")
-                    return
-            time.sleep(1)
-
+        generation_tasks[task_id] = {
+            "status": "completed",
+            "result": {"image_data": image_data, "mime_type": mime_type}
+        }
     except Exception as e:
         generation_tasks[task_id] = {"status": "failed", "error": str(e)}
 
 def _get_image_data(filename):
-    import requests
     import base64
 
     response = requests.get(f"{COMFYUI_URL}/view?filename={filename}", timeout=20)
@@ -376,7 +480,7 @@ def generate_image():
 
     task_id = f"task_{uuid.uuid4().hex}"
 
-    thread = threading.Thread(target=_run_image_generation, args=(task_id, data))
+    thread = threading.Thread(target=_run_image_generation_async, args=(task_id, data))
     thread.start()
 
     return jsonify({"task_id": task_id})
@@ -388,18 +492,46 @@ def get_generation_status(task_id):
         return jsonify({"error": "Task not found"}), 404
     return jsonify(task)
 
+def _generate_caption_logic(payload):
+    import google.generativeai as genai
+
+    prompt = payload.get('prompt')
+    character = payload.get('character')
+    if not prompt or not character:
+        raise ValueError("Prompt and character data are required")
+
+    api_key = os.environ.get("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY")
+    if "YOUR_" in api_key:
+        return "Caption generation requires a GEMINI_API_KEY."
+
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-1.5-flash')
+
+    generation_prompt = f"""
+      You are an AI assistant for a social media automation tool.
+      Your task is to generate a compelling and engaging Instagram caption.
+      **Character Details:**
+      - Name: {character.get('name', 'N/A')}
+      - Personality: {character.get('personality', 'N/A')}
+      - Backstory: {character.get('backstory', 'N/A')}
+      **Image Generation Prompt:**
+      ```{prompt}```
+      **Instructions:**
+      1. Write a caption that is authentic to the character's voice and personality.
+      2. Keep it concise and engaging (1-3 sentences).
+      3. Include 3-5 relevant hashtags.
+      **Generated Caption:**
+    """
+    response = model.generate_content(generation_prompt)
+    return response.text
+
 @app.route('/api/generate-caption', methods=['POST'])
 def generate_caption():
-    # Placeholder implementation
-    # In a real implementation, this would call an external AI API (e.g., Gemini)
-    # For now, we return a sample caption.
-    data = request.get_json()
-    prompt = data.get('prompt', 'a beautiful image')
-
-    # Create a sample caption based on the prompt
-    sample_caption = f"A caption for an image generated with the prompt: '{prompt}'. #aiart #generatedart #coolpictures"
-
-    return jsonify({"caption": sample_caption})
+    try:
+        caption = _generate_caption_logic(request.get_json())
+        return jsonify({"caption": caption})
+    except Exception as e:
+        return jsonify({"error": f"Failed to generate caption: {e}"}), 500
 
 # Endpoint to get available models from ComfyUI
 @app.route('/api/models', methods=['GET'])
