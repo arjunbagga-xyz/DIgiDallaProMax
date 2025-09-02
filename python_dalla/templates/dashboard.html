@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="jumbotron mt-5">
+    <h1 class="display-4">Welcome to Digital Dalla!</h1>
+    <p class="lead">This is your dashboard for managing AI-powered Instagram automation. Here's a quick overview of your system.</p>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <h2>System Status</h2>
+        <ul class="list-group">
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                ComfyUI Connection
+                {% if status.comfyui %}
+                    <span class="badge badge-success badge-pill">OK</span>
+                {% else %}
+                    <span class="badge badge-danger badge-pill">Error</span>
+                {% endif %}
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Gemini API Key
+                {% if status.gemini %}
+                    <span class="badge badge-success badge-pill">Configured</span>
+                {% else %}
+                    <span class="badge badge-danger badge-pill">Not Set</span>
+                {% endif %}
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                ComfyUI Path
+                {% if status.comfyui_path %}
+                    <span class="badge badge-success badge-pill">Configured</span>
+                {% else %}
+                    <span class="badge badge-danger badge-pill">Not Set</span>
+                {% endif %}
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Public URL for Instagram
+                {% if status.public_url %}
+                    <span class="badge badge-success badge-pill">Configured</span>
+                {% else %}
+                    <span class="badge badge-warning badge-pill">Not Set</span>
+                {% endif %}
+            </li>
+        </ul>
+    </div>
+    <div class="col-md-6">
+        <h2>Statistics</h2>
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Content Overview</h5>
+                <p class="card-text">
+                    <strong>Characters:</strong> {{ stats.characters }}<br>
+                    <strong>Scheduled Posts:</strong> {{ stats.scheduled_jobs }}<br>
+                    <strong>Completed Posts:</strong> {{ stats.completed_jobs }}<br>
+                    <strong>Failed Posts:</strong> {{ stats.failed_jobs }}
+                </p>
+                <a href="{{ url_for('list_characters') }}" class="btn btn-primary">Manage Characters</a>
+                <a href="{{ url_for('scheduler_page') }}" class="btn btn-info">View Scheduler</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

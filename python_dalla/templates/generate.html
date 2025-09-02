@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Generate Image{% endblock %}
+{% block content %}
+<h1 class="mt-5">Generate Image</h1>
+<form method="post" action="{{ url_for('generate') }}">
+    <div class="form-group">
+        <label for="character">Select Character</label>
+        <select class="form-control" id="character" name="character" required>
+            {% for character in characters %}
+            <option value="{{ character.id }}">{{ character.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="model">Select Model</label>
+        <select class="form-control" id="model" name="model" required>
+            {% for model in models %}
+            <option value="{{ model }}">{{ model }}</option>
+            {% else %}
+            <option disabled>No models found in ComfyUI.</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="lora">Select LoRA (Optional)</label>
+        <select class="form-control" id="lora" name="lora">
+            <option value="">None</option>
+            {% for lora in loras %}
+            <option value="{{ lora }}">{{ lora }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="prompt">Prompt</label>
+        <div class="input-group">
+            <textarea class="form-control" id="prompt" name="prompt" rows="5" placeholder="Enter your prompt here or generate one..." required></textarea>
+            <div class="input-group-append">
+                <button class="btn btn-outline-secondary" type="button" id="generate-prompt-btn">Generate Prompt</button>
+            </div>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Generate Image</button>
+</form>
+
+{% if image_filename %}
+<div class="mt-5">
+    <h2>Generated Image</h2>
+    <img src="{{ url_for('get_output_image', filename=image_filename) }}" class="img-fluid" alt="Generated Image">
+    <p class="mt-2">Filename: {{ image_filename }}</p>
+
+    <hr>
+
+    <div class="row">
+        <div class="col-md-6">
+            <h3>Post to Instagram Now</h3>
+            <form action="{{ url_for('post_to_instagram_route') }}" method="post">
+                <input type="hidden" name="image_filename" value="{{ image_filename }}">
+                <input type="hidden" name="character_id" value="{{ request.form.character if request.form else '' }}">
+                <div class="form-group">
+                    <label for="caption">Caption</label>
+                    <textarea name="caption" id="caption" rows="4" class="form-control" placeholder="Write a caption for your post..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-success">Post Now</button>
+            </form>
+        </div>
+        <div class="col-md-6">
+            <h3>Schedule Post for Later</h3>
+            <form action="{{ url_for('schedule_post_route') }}" method="post">
+                <input type="hidden" name="image_filename" value="{{ image_filename }}">
+                <input type="hidden" name="character_id" value="{{ request.form.character if request.form else '' }}">
+                <div class="form-group">
+                    <label for="caption_scheduled">Caption</label>
+                    <textarea name="caption" id="caption_scheduled" rows="4" class="form-control" placeholder="Write a caption for your post..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="post_at">Post at</label>
+                    <input type="datetime-local" name="post_at" id="post_at" class="form-control" required>
+                </div>
+                <button type="submit" class="btn btn-info">Schedule Post</button>
+            </form>
+        </div>
+    </div>
+    <small class="form-text text-muted">
+        Note: Posting requires the character to have valid Instagram credentials and the application to have a configured PUBLIC_URL.
+    </small>
+</div>
+{% endif %}
+
+{% block scripts %}
+<script>
+document.getElementById('generate-prompt-btn').addEventListener('click', function() {
+    const characterId = document.getElementById('character').value;
+    const btn = this;
+    const originalBtnText = btn.innerHTML;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Generating...';
+
+    fetch('{{ url_for("generate_prompt_route") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ character_id: characterId }),
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.prompt) {
+            document.getElementById('prompt').value = data.prompt;
+        } else if (data.error) {
+            alert('Error generating prompt: ' + data.error);
+        }
+    })
+    .catch((error) => {
+        console.error('Error:', error);
+        alert('An error occurred while generating the prompt.');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = originalBtnText;
+    });
+});
+</script>
+{% endblock %}
