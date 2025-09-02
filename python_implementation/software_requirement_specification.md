@@ -109,7 +109,7 @@ The system shall provide pages for managing content and application settings.
 The application will be a web-based dashboard with a Python backend.
 
 *   **Backend**: The backend will be built with a Python web framework (e.g., Flask, FastAPI) and will expose a RESTful API.
-*   **Frontend**: The frontend will be a single-page application (SPA) that communicates with the backend API. The frontend is a separate component and is not part of the Python implementation project.
+*   **Frontend**: The frontend will be a single-page application (SPA) wiht tabs (characters, models, LoRAs & training, Content, Status, Settings, etc.) that communicates with the backend API. The frontend is a separate component and is not part of the Python implementation project.
 *   **Database**: A simple file-based database using JSON files will be used for data storage, mirroring the structure of the original Node.js application.
 
 ## 5. Data Model
