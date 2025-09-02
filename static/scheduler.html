@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scheduler - AI Automation Dashboard</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>AI Automation Dashboard</h1>
+        <nav>
+            <ul>
+                <li><a href="/">Dashboard</a></li>
+                <li><a href="/characters.html">Characters</a></li>
+                <li><a href="/prompts.html">Prompts</a></li>
+                <li><a href="/generate.html">Generate</a></li>
+                <li><a href="/scheduler.html">Scheduler</a></li>
+                <li><a href="/lora.html">LoRA Training</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <section>
+            <h2>Scheduled Tasks</h2>
+            <table id="tasks-table">
+                <thead>
+                    <tr>
+                        <th>Character</th>
+                        <th>Type</th>
+                        <th>Schedule (Cron)</th>
+                        <th>Status</th>
+                        <th>Next Run</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Task rows will be inserted here -->
+                </tbody>
+            </table>
+        </section>
+        <section>
+            <h2>Create New Task</h2>
+            <form id="create-task-form">
+                <div>
+                    <label for="character-select">Character:</label>
+                    <select name="characterId" id="character-select" required>
+                        <option value="">--Loading characters--</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="task-type">Task Type:</label>
+                    <select name="type" id="task-type">
+                        <option value="generate_and_post">Generate & Post</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="schedule">Schedule (Cron Expression):</label>
+                    <input type="text" id="schedule" name="schedule" value="0 18 * * *" required>
+                </div>
+                <button type="submit">Create Task</button>
+            </form>
+        </section>
+    </main>
+    <script src="/js/main.js"></script>
+</body>
+</html>

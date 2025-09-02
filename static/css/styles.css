@@ -1,0 +1,78 @@
+body {
+    font-family: sans-serif;
+    margin: 0;
+    background-color: #f4f4f9;
+    color: #333;
+}
+
+header {
+    background-color: #4a4a8a;
+    color: white;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+header h1 {
+    margin: 0;
+}
+
+nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+}
+
+nav ul li {
+    margin-left: 20px;
+}
+
+nav a {
+    color: white;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+nav a:hover {
+    text-decoration: underline;
+}
+
+main {
+    padding: 2rem;
+}
+
+#system-status {
+    background-color: white;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.status-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #eee;
+}
+
+.status-item:last-child {
+    border-bottom: none;
+}
+
+.status-name {
+    font-weight: bold;
+}
+
+.status-value {
+    font-style: italic;
+}
+
+.status-value.connected, .status-value.running {
+    color: green;
+}
+
+.status-value.disconnected, .status-value.stopped {
+    color: red;
+}

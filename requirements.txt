@@ -1,0 +1,10 @@
+# Python dependencies for the project
+Flask
+requests
+APScheduler
+torch
+diffusers
+peft
+accelerate
+transformers
+bitsandbytes

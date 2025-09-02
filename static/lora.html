@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoRA Training - AI Automation Dashboard</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>AI Automation Dashboard</h1>
+        <nav>
+            <ul>
+                <li><a href="/">Dashboard</a></li>
+                <li><a href="/characters.html">Characters</a></li>
+                <li><a href="/prompts.html">Prompts</a></li>
+                <li><a href="/generate.html">Generate</a></li>
+                <li><a href="/scheduler.html">Scheduler</a></li>
+                <li><a href="/lora.html">LoRA Training</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <section>
+            <h2>Start New LoRA Training Job</h2>
+            <form id="lora-training-form">
+                <div>
+                    <label for="base-model">Base Model:</label>
+                    <input type="text" id="base-model" name="base_model" value="runwayml/stable-diffusion-v1-5">
+                </div>
+                <div>
+                    <label for="image-dir">Image Directory:</label>
+                    <input type="text" id="image-dir" name="image_dir" value="training_data/default_character">
+                </div>
+                <button type="submit">Start Training</button>
+            </form>
+        </section>
+        <section>
+            <h2>Training Status & Log</h2>
+            <div id="lora-status">
+                <p>Ready to train.</p>
+            </div>
+            <pre id="lora-log"></pre>
+        </section>
+    </main>
+    <script src="/js/main.js"></script>
+</body>
+</html>

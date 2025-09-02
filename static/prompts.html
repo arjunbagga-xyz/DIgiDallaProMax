@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompts - AI Automation Dashboard</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>AI Automation Dashboard</h1>
+        <nav>
+            <ul>
+                <li><a href="/">Dashboard</a></li>
+                <li><a href="/characters.html">Characters</a></li>
+                <li><a href="/prompts.html">Prompts</a></li>
+                <li><a href="/generate.html">Generate</a></li>
+                <li><a href="/scheduler.html">Scheduler</a></li>
+                <li><a href="/lora.html">LoRA Training</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <section>
+            <h2>Prompt Templates</h2>
+            <table id="templates-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>Template</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Template rows will be inserted here -->
+                </tbody>
+            </table>
+        </section>
+        <section>
+            <h2>Create New Template</h2>
+            <form id="create-template-form">
+                <div>
+                    <label for="template-name">Name:</label>
+                    <input type="text" id="template-name" name="name" required>
+                </div>
+                <div>
+                    <label for="template-category">Category:</label>
+                    <input type="text" id="template-category" name="category" required>
+                </div>
+                <div>
+                    <label for="template-text">Template:</label>
+                    <textarea id="template-text" name="template" required></textarea>
+                </div>
+                <button type="submit">Create Template</button>
+            </form>
+        </section>
+        <section>
+            <h2>Generated Prompts</h2>
+            <table id="generated-prompts-table">
+                <thead>
+                    <tr>
+                        <th>Character</th>
+                        <th>Prompt</th>
+                        <th>Created At</th>
+                        <th>Used</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Generated prompt rows will be inserted here -->
+                </tbody>
+            </table>
+        </section>
+    </main>
+    <script src="/js/main.js"></script>
+</body>
+</html>

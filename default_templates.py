@@ -1,0 +1,61 @@
+# default_templates.py
+
+from datetime import datetime
+
+DEFAULT_TEMPLATES = [
+    {
+        "id": "portrait-classic",
+        "name": "Classic Portrait",
+        "category": "portrait",
+        "template": "{character}, {personality} expression, {style} portrait, {lighting}, high quality, detailed face, consistent character",
+        "variables": ["character", "personality", "style", "lighting"],
+        "tags": ["portrait", "classic", "professional"],
+        "createdAt": datetime.now().isoformat(),
+        "updatedAt": datetime.now().isoformat(),
+        "usageCount": 0,
+    },
+    {
+        "id": "lifestyle-casual",
+        "name": "Casual Lifestyle",
+        "category": "lifestyle",
+        "template": "{character}, {personality} character, {activity}, {setting}, natural lighting, candid moment, {style} photography",
+        "variables": ["character", "personality", "activity", "setting", "style"],
+        "tags": ["lifestyle", "casual", "natural"],
+        "createdAt": datetime.now().isoformat(),
+        "updatedAt": datetime.now().isoformat(),
+        "usageCount": 0,
+    },
+    {
+        "id": "artistic-creative",
+        "name": "Artistic Creative",
+        "category": "artistic",
+        "template": "{character}, {personality} mood, {artistic_style}, {composition}, creative lighting, artistic interpretation, {medium} style",
+        "variables": ["character", "personality", "artistic_style", "composition", "medium"],
+        "tags": ["artistic", "creative", "experimental"],
+        "createdAt": datetime.now().isoformat(),
+        "updatedAt": datetime.now().isoformat(),
+        "usageCount": 0,
+    },
+    {
+        "id": "fantasy-magical",
+        "name": "Fantasy Magical",
+        "category": "fantasy",
+        "template": "{character}, {personality} character, {magical_element}, {fantasy_setting}, ethereal lighting, mystical atmosphere, fantasy art style",
+        "variables": ["character", "personality", "magical_element", "fantasy_setting"],
+        "tags": ["fantasy", "magical", "ethereal"],
+        "createdAt": datetime.now().isoformat(),
+        "updatedAt": datetime.now().isoformat(),
+        "usageCount": 0,
+    },
+    {
+        "id": "realistic-photographic",
+        "name": "Realistic Photography",
+        "category": "realistic",
+        "template": "{character}, {personality} expression, {photo_style}, {camera_angle}, professional photography, {lighting_type}, sharp focus, 8k resolution",
+        "variables": ["character", "personality", "photo_style", "camera_angle", "lighting_type"],
+        "tags": ["realistic", "photography", "professional"],
+        "createdAt": datetime.now().isoformat(),
+        "updatedAt": datetime.now().isoformat(),
+        "usageCount": 0,
+    },
+]

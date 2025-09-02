@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Characters - AI Automation Dashboard</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>AI Automation Dashboard</h1>
+        <nav>
+            <ul>
+                <li><a href="/">Dashboard</a></li>
+                <li><a href="/characters.html">Characters</a></li>
+                <li><a href="/prompts.html">Prompts</a></li>
+                <li><a href="/generate.html">Generate</a></li>
+                <li><a href="/scheduler.html">Scheduler</a></li>
+                <li><a href="/lora.html">LoRA Training</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <section>
+            <h2>Manage Characters</h2>
+            <table id="characters-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Personality</th>
+                        <th>Instagram Handle</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Character rows will be inserted here by JavaScript -->
+                </tbody>
+            </table>
+        </section>
+        <section>
+            <h2>Create New Character</h2>
+            <form id="create-character-form">
+                <div>
+                    <label for="name">Name:</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                <div>
+                    <label for="personality">Personality:</label>
+                    <textarea id="personality" name="personality" required></textarea>
+                </div>
+                <div>
+                    <label for="backstory">Backstory:</label>
+                    <textarea id="backstory" name="backstory"></textarea>
+                </div>
+                <div>
+                    <label for="instagramHandle">Instagram Handle:</label>
+                    <input type="text" id="instagramHandle" name="instagramHandle">
+                </div>
+                <button type="submit">Create Character</button>
+            </form>
+        </section>
+    </main>
+    <script src="/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate Content - AI Automation Dashboard</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>AI Automation Dashboard</h1>
+        <nav>
+            <ul>
+                <li><a href="/">Dashboard</a></li>
+                <li><a href="/characters.html">Characters</a></li>
+                <li><a href="/prompts.html">Prompts</a></li>
+                <li><a href="/generate.html">Generate</a></li>
+                <li><a href="/scheduler.html">Scheduler</a></li>
+                <li><a href="/lora.html">LoRA Training</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <section>
+            <h2>Generate Image</h2>
+            <form id="generate-image-form">
+                <div>
+                    <label for="model-select">Choose a Model:</label>
+                    <select name="model" id="model-select" required>
+                        <option value="">--Loading models--</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="prompt">Prompt:</label>
+                    <textarea id="prompt" name="prompt" rows="4" required></textarea>
+                </div>
+                <button type="submit">Generate Image</button>
+            </form>
+        </section>
+        <section>
+            <h2>Result</h2>
+            <div id="generation-status">
+                <p>Ready to generate.</p>
+            </div>
+            <div id="result-image-container">
+                <!-- Generated image will be displayed here -->
+            </div>
+        </section>
+    </main>
+    <script src="/js/main.js"></script>
+</body>
+</html>
