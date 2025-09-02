@@ -2,7 +2,7 @@
 
 ## 1. Introduction
 
-This document outlines the software requirements for the Python implementation of the Digital Dalla project. The project is a web-based dashboard for managing and automating AI-powered Instagram and Twitter accounts. It provides a user interface for creating AI characters, generating images, and scheduling posts.
+This document outlines the software requirements for the Python implementation of the Digital Dalla project. The project is a web-based dashboard for managing and automating AI-powered Instagram and Twitter accounts. It provides a user interface for creating AI characters, generating images, scheduling posts, and managing content.
 
 The purpose of this document is to provide a detailed description of the system's functional and non-functional requirements, its architecture, data model, and external interfaces. This document is intended for the development team to guide the implementation of the Python version of the application.
 
@@ -20,13 +20,14 @@ The system shall allow users to perform Create, Read, Update, and Delete (CRUD) 
 *   `personality`: A description of the character's personality.
 *   `backstory`: The character's background story.
 *   `instagramHandle`: The character's Instagram handle.
+*   `twitterHandle`: The character's Twitter handle.
 *   `isActive`: A boolean indicating if the character is active.
 *   `createdAt`: Timestamp of character creation.
 *   `updatedAt`: Timestamp of the last update.
 *   `preferredModel`: The preferred ComfyUI model for image generation.
 *   `triggerWord`: The trigger word for the character's LoRA model.
 *   `promptSettings`: Base prompt settings (base prompt, negative prompt, style, mood).
-*   `narratives`: Story arcs for the character.
+*   `narratives`: Story arcs for the character, each with an `id`, `title`, `description`, `startDate`, and `endDate`.
 *   `instagramAccountId`, `instagramApiKey`: Instagram API credentials.
 *   `twitterAccountId`, `twitterAppKey`, `twitterAppSecret`, `twitterAccessToken`, `twitterAccessSecret`: Twitter API credentials.
 
@@ -34,8 +35,9 @@ The system shall allow users to perform Create, Read, Update, and Delete (CRUD) 
 
 The system shall be able to generate images using a connected ComfyUI instance.
 
-*   **Model Support**: The system must support generating images using different types of models, including SDXL, SD1.5, and FLUX models. The system will dynamically construct the appropriate ComfyUI workflow based on the selected model.
-*   **LoRA Integration**: The system shall support the use of LoRA (Low-Rank Adaptation) models to generate images that are consistent with a specific character's appearance.
+*   **Model Selection**: The system will fetch a list of available checkpoint models from the ComfyUI server via a `GET /api/models` endpoint. The user will be able to select a model from this list for image generation.
+*   **Dynamic Workflows**: The system will dynamically construct the appropriate ComfyUI workflow (for SDXL, SD1.5, or FLUX models) based on the selected model and user parameters.
+*   **LoRA Integration**: The system shall support the use of LoRA (Low-Rank Adaptation) models to generate images that are consistent with a specific character's appearance. The available LoRAs will also be fetched from the ComfyUI server.
 *   **API Endpoint**: Image generation will be exposed through a `POST /api/generate-image` endpoint.
 
 ### 2.3. Social Media Integration
@@ -70,20 +72,20 @@ The system shall provide a dashboard to monitor the status of its components and
 *   **Status Checks**: The monitoring dashboard will check the status of the ComfyUI server, the file-based database, the scheduler, and Instagram connectivity.
 *   **API Endpoint**: The system status will be available through a `GET /api/system/status` endpoint.
 
-### 2.7. LoRA Training (Simulation)
+### 2.7. LoRA Training
 
-The system will include a user interface to simulate the process of LoRA model training.
+The system will provide a mechanism for training LoRA models for characters.
 
-*   **Simulated Process**: This feature is a simulation and will not perform any actual model training. It is intended to mimic the UI and workflow of a real training process.
-*   **API Endpoint**: The simulation will be initiated through a `POST /api/lora/train` endpoint.
+*   **Training Process**: The system will trigger a LoRA training process using a script or a dedicated training service like Kohya SS. The training will be initiated via a `POST /api/lora/train` endpoint.
+*   **Training Parameters**: The user will be able to specify the base model, training images, and other training parameters.
+*   **Training Status**: The system will provide a way to monitor the status of the training process.
 
-### 2.8. Deployment (Simulation)
+### 2.8. Content Management and Settings
 
-The system will include a feature to generate configuration files for various deployment options.
+The system shall provide pages for managing content and application settings.
 
-*   **Configuration Generation**: This feature will generate configuration files for deployment platforms like Docker or Vercel.
-*   **No Actual Deployment**: The system will not perform any actual deployment. The user will need to manually use the generated files.
-*   **API Endpoint**: This feature will be handled by a `/api/deployment` endpoint.
+*   **Content Management Page**: A page where users can view all generated content, edit captions, and post to social media.
+*   **Settings Page**: A page where users can manage API keys (e.g., Gemini API key) and view information about data storage locations.
 
 ## 3. Non-Functional Requirements
 
@@ -140,7 +142,8 @@ Stores an array of generated prompt objects.
 
 The system will interact with several external services through their APIs.
 
-*   **ComfyUI**: Used for generating images. The system will send workflow JSONs to the ComfyUI server's API.
+*   **ComfyUI**: Used for generating images and listing available models. The system will send workflow JSONs to the ComfyUI server's API.
 *   **Google Gemini**: Used for generating text content, such as captions for social media posts.
 *   **Instagram Graph API**: Used for posting images and captions to Instagram.
 *   **Twitter API**: Used for posting images and captions to Twitter/X.
+*   **LoRA Training Service**: An external service or script (e.g., Kohya SS) for training LoRA models.
