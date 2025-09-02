@@ -26,3 +26,14 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env
+
+# Python
+__pycache__/
+*.pyc
+.env
+.venv
+venv/
+*.log
+uvicorn.log
+characters.json
+update.json
