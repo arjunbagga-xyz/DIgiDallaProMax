@@ -58,58 +58,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    makeDraggable(dialogBox, dialogBox.querySelector('.dialog-header'));
-
     // Set initial tab
     document.querySelector('.nav-tab[data-tab="characters"]').click();
+
+    // Apply saved settings on initial load
+    const savedBlur = localStorage.getItem('glassBlur') || 16;
+    document.documentElement.style.setProperty('--glass-blur', `${savedBlur}px`);
 });
-
-function makeDraggable(element, handle) {
-    let isDragging = false;
-    let offset = { x: 0, y: 0 };
-    const moveHandle = handle;
-
-    if (!moveHandle) return; // Don't do anything if there's no handle
-
-    moveHandle.style.cursor = 'move';
-
-    moveHandle.addEventListener('mousedown', (e) => {
-        // Prevent dragging from form elements inside the handle
-        if (e.target.closest('input, textarea, button, select')) {
-            return;
-        }
-        isDragging = true;
-
-        const rect = element.getBoundingClientRect();
-        offset.x = e.clientX - rect.left;
-        offset.y = e.clientY - rect.top;
-
-        moveHandle.style.cursor = 'grabbing';
-        document.body.style.userSelect = 'none'; // Prevent text selection while dragging
-
-        e.preventDefault(); // Prevent default text selection behavior
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (isDragging) {
-            // We need to account for the parent's position if it's not the body
-            const parentRect = element.parentElement.getBoundingClientRect();
-            let x = e.clientX - parentRect.left - offset.x;
-            let y = e.clientY - parentRect.top - offset.y;
-
-            element.style.left = `${x}px`;
-            element.style.top = `${y}px`;
-        }
-    });
-
-    document.addEventListener('mouseup', () => {
-        if (isDragging) {
-            isDragging = false;
-            moveHandle.style.cursor = 'move';
-            document.body.style.userSelect = '';
-        }
-    });
-}
 
 // --- Data Fetching Router ---
 function fetchDataForTab(tabName) {
@@ -149,6 +104,8 @@ async function fetchCharacters() {
 // --- Settings Tab ---
 function fetchSettings() {
     const panel = document.getElementById('settings-panel');
+    const savedBlur = localStorage.getItem('glassBlur') || 16;
+
     panel.innerHTML = `
         <h2>Settings</h2>
         <p>This page is for managing application-wide settings.</p>
@@ -156,9 +113,26 @@ function fetchSettings() {
             <strong>Theme:</strong> The light/dark mode toggle is in the top-right corner of the header.
         </div>
         <div class="settings-item">
+            <label for="blur-slider">Glass Blur Intensity: <span id="blur-value">${savedBlur}px</span></label>
+            <input type="range" id="blur-slider" min="0" max="40" value="${savedBlur}">
+        </div>
+        <div class="settings-item">
             <strong>API Keys & Endpoints:</strong> Currently, these must be configured in the <code>.env</code> file on the server.
         </div>
     `;
+
+    const blurSlider = panel.querySelector('#blur-slider');
+    const blurValueSpan = panel.querySelector('#blur-value');
+
+    blurSlider.addEventListener('input', (e) => {
+        const newBlur = e.target.value;
+        document.documentElement.style.setProperty('--glass-blur', `${newBlur}px`);
+        blurValueSpan.textContent = `${newBlur}px`;
+    });
+
+    blurSlider.addEventListener('change', (e) => {
+        localStorage.setItem('glassBlur', e.target.value);
+    });
 }
 
 function renderCharacters(characters) {
@@ -172,20 +146,26 @@ function renderCharacters(characters) {
         const card = document.createElement('div');
         card.className = 'card character-card'; // Add specific class
         card.innerHTML = `
+            <img src="https://via.placeholder.com/150/000000/FFFFFF/?text=${char.name.charAt(0)}" alt="${char.name}" style="width: 80%; height: auto; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 0.5rem; margin-bottom: 1rem;">
             <h3>${char.name}</h3>
-            <p>${char.personality.substring(0, 100)}...</p>
             <div class="card-actions">
                 <button class="edit-btn" data-id="${char.id}">Edit</button>
+                <button class="train-lora-btn" data-id="${char.id}">Train</button>
                 <button class="delete-btn" data-id="${char.id}">Delete</button>
             </div>
         `;
         container.appendChild(card);
-        // makeDraggable(card); // Removing draggable cards for now to fix dialog bug
     });
 
     // Add event listeners
     container.querySelectorAll('.edit-btn').forEach(btn => btn.addEventListener('click', handleEditCharacter));
     container.querySelectorAll('.delete-btn').forEach(btn => btn.addEventListener('click', handleDeleteCharacter));
+    container.querySelectorAll('.train-lora-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const charId = e.target.dataset.id;
+            handleTrainLora(charId);
+        });
+    });
 }
 
 function handleAddCharacter() {
@@ -281,7 +261,42 @@ function createCharacterForm(character = null) {
                     renderNarratives();
                 };
             });
-            // Edit functionality can be added here in a similar way
+
+            list.querySelectorAll('.edit-narrative-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    const index = e.target.dataset.index;
+                    const item = e.target.closest('.narrative-item');
+                    const narrative = narratives[index];
+
+                    // Replace item content with a form
+                    item.innerHTML = `
+                        <input type="text" value="${narrative.title}" class="narrative-title-input">
+                        <textarea class="narrative-desc-input">${narrative.description}</textarea>
+                        <input type="date" value="${narrative.startDate.split('T')[0]}" class="narrative-start-input">
+                        <input type="date" value="${narrative.endDate.split('T')[0]}" class="narrative-end-input">
+                        <div class="card-actions">
+                            <button type="button" class="save-narrative-btn">Save</button>
+                            <button type="button" class="cancel-narrative-btn">Cancel</button>
+                        </div>
+                    `;
+
+                    item.querySelector('.cancel-narrative-btn').onclick = () => {
+                        renderNarratives(); // Just re-render to cancel
+                    };
+
+                    item.querySelector('.save-narrative-btn').onclick = () => {
+                        const updatedNarrative = {
+                            ...narrative,
+                            title: item.querySelector('.narrative-title-input').value,
+                            description: item.querySelector('.narrative-desc-input').value,
+                            startDate: new Date(item.querySelector('.narrative-start-input').value).toISOString(),
+                            endDate: new Date(item.querySelector('.narrative-end-input').value).toISOString(),
+                        };
+                        narratives[index] = updatedNarrative;
+                        renderNarratives();
+                    };
+                };
+            });
         };
 
         narrativeSection.querySelector('#add-narrative-btn').onclick = () => {
@@ -352,17 +367,19 @@ async function fetchModelsAndLoras() {
             <h2>Models & LoRA Training</h2>
             <button id="train-lora-btn">Train New LoRA</button>
         </div>
-        <div id="base-models-section">
-            <h3>Base Models</h3>
-            <div class="card-container">Loading...</div>
-        </div>
-        <div id="loras-section">
-            <h3>LoRAs</h3>
-            <div class="card-container"><p>LoRA listing is not yet supported by the API.</p></div>
-        </div>
-        <div id="training-jobs-section">
-            <h3>Training Jobs</h3>
-            <div class="card-container"><p>Training job progress is not yet supported by the API.</p></div>
+        <div class="card-container">
+            <div class="card" id="base-models-section">
+                <h3>Base Models</h3>
+                <div class="model-list">Loading...</div>
+            </div>
+            <div class="card" id="loras-section">
+                <h3>LoRAs</h3>
+                <p>LoRA listing is not yet supported by the API.</p>
+            </div>
+            <div class="card" id="training-jobs-section">
+                <h3>Training Jobs</h3>
+                <p>Training job progress is not yet supported by the API.</p>
+            </div>
         </div>
     `;
 
@@ -372,35 +389,49 @@ async function fetchModelsAndLoras() {
         const response = await fetch('/api/models');
         if (!response.ok) throw new Error('Failed to fetch base models');
         const models = await response.json();
-        const container = panel.querySelector('#base-models-section .card-container');
+        const container = panel.querySelector('#base-models-section .model-list');
         container.innerHTML = '';
         models.forEach(model => {
-            const card = document.createElement('div');
-            card.className = 'card';
-            card.textContent = model;
-            container.appendChild(card);
+            const item = document.createElement('p');
+            item.textContent = model;
+            container.appendChild(item);
         });
     } catch (error) {
         console.error(error);
-        panel.querySelector('#base-models-section .card-container').innerHTML = `<p class="error">${error.message}</p>`;
+        panel.querySelector('#base-models-section .model-list').innerHTML = `<p class="error">${error.message}</p>`;
     }
 }
 
-async function handleTrainLora() {
-    const form = await createLoraTrainingForm();
+async function handleTrainLora(characterId = null) {
+    const form = await createLoraTrainingForm(characterId);
     window.showDialog('Train New LoRA', form);
 }
 
-async function createLoraTrainingForm() {
+async function createLoraTrainingForm(characterId = null) {
     const form = document.createElement('form');
 
     try {
-        const [characters, models] = await Promise.all([
-            fetch('/api/characters').then(res => res.json()),
-            fetch('/api/models').then(res => res.json())
+        const [charResponse, modelsResponse] = await Promise.all([
+            fetch('/api/characters'),
+            fetch('/api/models')
         ]);
 
-        const characterOptions = characters.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        if (!charResponse.ok) {
+            throw new Error(`Failed to load characters: ${charResponse.statusText}`);
+        }
+        const characters = await charResponse.json();
+
+        if (!modelsResponse.ok) {
+            const err = await modelsResponse.json();
+            throw new Error(`Failed to load models: ${err.detail || modelsResponse.statusText}`);
+        }
+        const models = await modelsResponse.json();
+
+        if (!Array.isArray(models)) {
+            throw new Error('The server did not return a valid list of models.');
+        }
+
+        const characterOptions = characters.map(c => `<option value="${c.id}" ${c.id === characterId ? 'selected' : ''}>${c.name}</option>`).join('');
         const modelOptions = models.map(m => `<option value="${m}">${m}</option>`).join('');
 
         form.innerHTML = `
@@ -412,7 +443,8 @@ async function createLoraTrainingForm() {
             <button type="submit">Start Training</button>
         `;
     } catch (error) {
-        form.innerHTML = `<p class="error">Could not load data for form. ${error.message}</p>`;
+        console.error('Error creating LoRA form:', error);
+        form.innerHTML = `<p class="error">Could not load data for form: ${error.message}</p>`;
     }
 
     form.addEventListener('submit', async (e) => {
@@ -560,7 +592,6 @@ async function fetchStatus() {
                 <p style="color: ${isOk ? 'var(--accent-primary)' : 'var(--accent-danger)'}">${value}</p>
             `;
             container.appendChild(card);
-            // makeDraggable(card); // Removing draggable cards for now to fix dialog bug
         });
 
     } catch (error) {
