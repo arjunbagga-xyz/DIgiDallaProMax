@@ -3,37 +3,39 @@
 :root {
     /* Dark Theme (Default) */
     --font-sans: 'Inter', sans-serif;
-    --bg-color: #020617;
-    --bg-gradient-start: #1e3a8a;
-    --bg-gradient-end: #4c1d95;
-    --text-primary: #e2e8f0;
-    --text-secondary: #94a3b8;
-    --glass-bg: rgba(30, 41, 59, 0.5); /* slate-800 @ 50% */
-    --glass-border: rgba(255, 255, 255, 0.1);
-    --glass-shadow: rgba(0, 0, 0, 0.25);
-    --accent-primary: #3b82f6; /* blue-500 */
-    --accent-secondary: #8b5cf6; /* violet-500 */
+    --bg-color: #000000;
+    --bg-gradient-start: #111827; /* gray-900 */
+    --bg-gradient-end: #000000;
+    --text-primary: #e5e7eb; /* gray-200 */
+    --text-secondary: #9ca3af; /* gray-400 */
+    --glass-bg: rgba(31, 41, 55, 0.4); /* gray-800 @ 40% */
+    --glass-border: rgba(255, 255, 255, 0.15);
+    --glass-shadow: rgba(0, 0, 0, 0.3);
+    --glass-inset-shadow: rgba(255, 255, 255, 0.1);
+    --accent-primary: #f9fafb; /* gray-50 */
+    --accent-secondary: #d1d5db; /* gray-300 */
     --accent-danger: #ef4444; /* red-500 */
-    --input-bg: rgba(51, 65, 85, 0.5); /* slate-700 @ 50% */
-    --input-border: #475569; /* slate-600 */
+    --input-bg: rgba(55, 65, 81, 0.5); /* gray-700 @ 50% */
+    --input-border: #4b5563; /* gray-600 */
     --input-focus-border: var(--accent-primary);
 }
 
 body.light-mode {
     /* Light Theme */
     --bg-color: #f1f5f9; /* slate-100 */
-    --bg-gradient-start: #bfdbfe; /* blue-200 */
-    --bg-gradient-end: #ddd6fe; /* violet-200 */
-    --text-primary: #0f172a; /* slate-900 */
-    --text-secondary: #475569; /* slate-600 */
-    --glass-bg: rgba(255, 255, 255, 0.5);
-    --glass-border: rgba(0, 0, 0, 0.1);
-    --glass-shadow: rgba(0, 0, 0, 0.1);
-    --accent-primary: #2563eb; /* blue-600 */
-    --accent-secondary: #7c3aed; /* violet-600 */
+    --bg-gradient-start: #dbeafe; /* blue-100 */
+    --bg-gradient-end: #e0e7ff; /* indigo-100 */
+    --text-primary: #1f2937; /* gray-800 */
+    --text-secondary: #4b5563; /* gray-600 */
+    --glass-bg: rgba(255, 255, 255, 0.4);
+    --glass-border: rgba(0, 0, 0, 0.15);
+    --glass-shadow: rgba(0, 0, 0, 0.15);
+    --glass-inset-shadow: rgba(0, 0, 0, 0.05);
+    --accent-primary: #374151; /* gray-700 */
+    --accent-secondary: #1f2937; /* gray-800 */
     --accent-danger: #dc2626; /* red-600 */
-    --input-bg: rgba(226, 232, 240, 0.5); /* slate-200 @ 50% */
-    --input-border: #cbd5e1; /* slate-300 */
+    --input-bg: rgba(243, 244, 246, 0.5); /* gray-100 @ 50% */
+    --input-border: #d1d5db; /* gray-300 */
     --input-focus-border: var(--accent-primary);
 }
 
@@ -109,7 +111,7 @@ body {
 
 .nav-tab.active {
     color: var(--text-primary);
-    background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
+    background: var(--accent-primary);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
@@ -121,11 +123,11 @@ body {
 
 .content-panel {
     background: var(--glass-bg);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
     border: 1px solid var(--glass-border);
     border-radius: 1rem;
-    box-shadow: 0 8px 24px var(--glass-shadow);
+    box-shadow: 0 8px 32px var(--glass-shadow), inset 0 2px 4px var(--glass-inset-shadow);
     padding: 2rem;
     height: 100%;
     overflow-y: auto;
@@ -134,10 +136,12 @@ body {
 /* --- Cards --- */
 .card {
     background: var(--glass-bg);
+    backdrop-filter: blur(10px) saturate(120%);
+    -webkit-backdrop-filter: blur(10px) saturate(120%);
     border: 1px solid var(--glass-border);
     border-radius: 0.75rem;
     padding: 1.5rem;
-    box-shadow: 0 4px 12px var(--glass-shadow);
+    box-shadow: 0 4px 12px var(--glass-shadow), inset 0 1px 2px var(--glass-inset-shadow);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -151,7 +155,7 @@ button, .button {
     font-family: var(--font-sans);
     font-size: 0.9rem;
     font-weight: 600;
-    color: white;
+    color: var(--bg-color);
     background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
     border: none;
     padding: 0.6rem 1.2rem;
@@ -184,7 +188,7 @@ input, textarea, select {
 input:focus, textarea:focus, select:focus {
     outline: none;
     border-color: var(--input-focus-border);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 0 0 3px var(--glass-bg);
 }
 
 label {
@@ -214,9 +218,11 @@ label {
     width: 90%;
     max-width: 500px;
     background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
     border: 1px solid var(--glass-border);
     border-radius: 1rem;
-    box-shadow: 0 16px 48px var(--glass-shadow);
+    box-shadow: 0 16px 48px var(--glass-shadow), inset 0 3px 6px var(--glass-inset-shadow);
     position: relative;
 }
 

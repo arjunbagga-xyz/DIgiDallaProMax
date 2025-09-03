@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    makeDraggable(dialogBox);
+    makeDraggable(dialogBox, dialogBox.querySelector('.dialog-header'));
 
     // Set initial tab
     document.querySelector('.nav-tab[data-tab="characters"]').click();
@@ -67,30 +67,38 @@ document.addEventListener('DOMContentLoaded', () => {
 function makeDraggable(element, handle) {
     let isDragging = false;
     let offset = { x: 0, y: 0 };
-    const moveHandle = handle || element;
+    const moveHandle = handle;
+
+    if (!moveHandle) return; // Don't do anything if there's no handle
 
     moveHandle.style.cursor = 'move';
 
     moveHandle.addEventListener('mousedown', (e) => {
-        isDragging = true;
-
-        // If the element is position static, we need to make it absolute
-        if (window.getComputedStyle(element).position === 'static') {
-            element.style.position = 'absolute';
+        // Prevent dragging from form elements inside the handle
+        if (e.target.closest('input, textarea, button, select')) {
+            return;
         }
+        isDragging = true;
 
         const rect = element.getBoundingClientRect();
         offset.x = e.clientX - rect.left;
         offset.y = e.clientY - rect.top;
+
         moveHandle.style.cursor = 'grabbing';
-        element.style.zIndex = 1001; // Bring to front
-        e.stopPropagation();
+        document.body.style.userSelect = 'none'; // Prevent text selection while dragging
+
+        e.preventDefault(); // Prevent default text selection behavior
     });
 
     document.addEventListener('mousemove', (e) => {
         if (isDragging) {
-            element.style.left = `${e.clientX - offset.x}px`;
-            element.style.top = `${e.clientY - offset.y}px`;
+            // We need to account for the parent's position if it's not the body
+            const parentRect = element.parentElement.getBoundingClientRect();
+            let x = e.clientX - parentRect.left - offset.x;
+            let y = e.clientY - parentRect.top - offset.y;
+
+            element.style.left = `${x}px`;
+            element.style.top = `${y}px`;
         }
     });
 
@@ -98,7 +106,7 @@ function makeDraggable(element, handle) {
         if (isDragging) {
             isDragging = false;
             moveHandle.style.cursor = 'move';
-            element.style.zIndex = ''; // Reset z-index
+            document.body.style.userSelect = '';
         }
     });
 }
@@ -172,7 +180,7 @@ function renderCharacters(characters) {
             </div>
         `;
         container.appendChild(card);
-        makeDraggable(card); // Make the card draggable
+        // makeDraggable(card); // Removing draggable cards for now to fix dialog bug
     });
 
     // Add event listeners
@@ -552,7 +560,7 @@ async function fetchStatus() {
                 <p style="color: ${isOk ? 'var(--accent-primary)' : 'var(--accent-danger)'}">${value}</p>
             `;
             container.appendChild(card);
-            makeDraggable(card); // Make the status card draggable
+            // makeDraggable(card); // Removing draggable cards for now to fix dialog bug
         });
 
     } catch (error) {
