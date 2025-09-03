@@ -10,7 +10,8 @@ import sys
 import uuid
 from dotenv import load_dotenv
 import google.generativeai as genai
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from .models import (
     Character,
     CharacterCreate,
@@ -61,6 +62,11 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# --- Frontend Serving ---
+# Mount the static files directory
+# The path is relative to where the app is run from (the python_implementation dir)
+app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
 
 @app.post("/api/characters", response_model=Character, status_code=status.HTTP_201_CREATED, tags=["Characters"])
 def create_character(character_data: CharacterCreate):
@@ -515,6 +521,6 @@ def get_lora_log(log_filename: str):
         return PlainTextResponse(content=f.read())
 
 
-@app.get("/")
+@app.get("/", response_class=FileResponse)
 def read_root():
-    return {"message": "Welcome to the Digital Dalla API"}
+    return "frontend/index.html"

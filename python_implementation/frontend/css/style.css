@@ -1,0 +1,126 @@
+/* --- Basic Setup & Fonts --- */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400;700&display=swap');
+
+:root {
+    --font-primary: 'Orbitron', sans-serif; /* Sci-fi, futuristic font for headers */
+    --font-secondary: 'Roboto', sans-serif; /* Clean, readable font for body text */
+
+    --neon-cyan: #00ffff;
+    --neon-magenta: #ff00ff;
+    --neon-pink: #ff1b8d;
+    --neon-blue: #0077ff;
+
+    --bg-color: #0a0a14;
+    --text-color: #e0e0e0;
+    --glass-bg: rgba(15, 20, 40, 0.4);
+    --glass-border: rgba(0, 255, 255, 0.3);
+}
+
+body {
+    margin: 0;
+    font-family: var(--font-secondary);
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    overflow: hidden; /* Prevent scrollbars from the 3D scene */
+}
+
+/* --- 3D Scene Container --- */
+#scene-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -1; /* Place it behind the HTML UI */
+}
+
+/* --- Main UI Elements --- */
+#ui-container {
+    position: relative;
+    z-index: 1;
+}
+
+#main-nav {
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+#content-panels {
+    position: relative;
+}
+
+/* --- Glassmorphism & Neon Styles --- */
+.content-panel, .nav-tab {
+    background: var(--glass-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    border-radius: 15px;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+
+.nav-tab {
+    font-family: var(--font-primary);
+    font-size: 1rem;
+    color: var(--text-color);
+    background-color: transparent;
+    border: 1px solid var(--glass-border);
+    padding: 0.75rem 1.5rem;
+    cursor: pointer;
+}
+
+.nav-tab.active, .nav-tab:hover {
+    background: rgba(0, 255, 255, 0.1);
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+    color: var(--neon-cyan);
+    border-color: var(--neon-cyan);
+}
+
+.content-panel {
+    padding: 2rem;
+    margin: 2rem;
+    /* Dimensions and positioning will be controlled by Three.js */
+}
+
+h2 {
+    font-family: var(--font-primary);
+    text-align: center;
+    margin-top: 0;
+    color: var(--neon-cyan);
+    text-shadow: 0 0 5px var(--neon-cyan);
+}
+
+/* --- Specific Component Styles --- */
+#status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.status-item {
+    padding: 1rem;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    text-align: center;
+}
+
+.status-item h3 {
+    margin: 0 0 0.5rem 0;
+    font-family: var(--font-primary);
+    font-size: 1rem;
+    opacity: 0.8;
+}
+
+.status-item p {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+/* Status-specific colors */
+.status-ok { color: #00ff88; }
+.status-error { color: #ff4444; }
+.status-warn { color: #ffaa00; }
