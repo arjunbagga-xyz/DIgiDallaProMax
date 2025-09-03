@@ -34,9 +34,15 @@ from contextlib import asynccontextmanager
 from . import comfyui_utils
 from . import social_media_utils
 from . import scheduler_service
+from dotenv import get_key, set_key
+from typing import Dict
+
+# Define the path to the .env file
+# It's in the parent directory of the 'src' directory where main.py is
+DOTENV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
 
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv(DOTENV_PATH)
 
 # Configure the Gemini API
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -145,6 +151,45 @@ def delete_character(character_id: str):
 
     database.save_characters(characters_to_keep)
     return
+
+@app.get("/api/settings", response_model=Dict[str, str], tags=["System"])
+def get_settings():
+    """
+    Retrieve the current settings from the .env file.
+    """
+    if not os.path.exists(DOTENV_PATH):
+        return {}
+
+    # This is a simple implementation. A real app should be careful about
+    # which keys are exposed to the frontend.
+    with open(DOTENV_PATH, 'r') as f:
+        lines = f.readlines()
+        settings = {}
+        for line in lines:
+            if '=' in line:
+                key, value = line.strip().split('=', 1)
+                settings[key] = value
+        return settings
+
+@app.post("/api/settings", status_code=status.HTTP_204_NO_CONTENT, tags=["System"])
+def update_settings(settings: Dict[str, str]):
+    """
+    Update the .env file with new settings and trigger a server reload.
+    """
+    try:
+        for key, value in settings.items():
+            set_key(DOTENV_PATH, key, value)
+
+        # Touch the main.py file to trigger a reload by uvicorn
+        # This is a development-friendly trick. In production, you'd use a more robust
+        # process management system (like gunicorn's reload signal).
+        with open(__file__, 'a') as f:
+            os.utime(f.fileno(), None)
+
+        return
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to write to .env file: {e}")
+
 
 @app.get("/api/system/status", response_model=SystemStatus, tags=["System"])
 def get_system_status():

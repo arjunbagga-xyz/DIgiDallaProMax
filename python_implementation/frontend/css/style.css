@@ -111,7 +111,7 @@ body {
 }
 
 .nav-tab.active {
-    color: #000;
+    color: var(--bg-color);
     background: var(--accent-primary);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
@@ -147,12 +147,18 @@ body {
 }
 
 .character-card, .status-card, .content-char-card {
-    aspect-ratio: 1 / 1;
+    /* aspect-ratio: 1 / 1; */ /* Removing this to fix card size */
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     text-align: center;
+}
+
+.card-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1.5rem;
 }
 
 .card:hover {

@@ -102,25 +102,49 @@ async function fetchCharacters() {
 }
 
 // --- Settings Tab ---
-function fetchSettings() {
+async function fetchSettings() {
     const panel = document.getElementById('settings-panel');
+    panel.innerHTML = `<h2>Settings</h2><p>Loading settings...</p>`;
+
+    try {
+        const response = await fetch('/api/settings');
+        if (!response.ok) throw new Error('Failed to load settings');
+        const settings = await response.json();
+        renderSettingsForm(panel, settings);
+    } catch (error) {
+        panel.innerHTML = `<h2>Settings</h2><p class="error">Could not load settings: ${error.message}</p>`;
+    }
+}
+
+function renderSettingsForm(panel, settings) {
     const savedBlur = localStorage.getItem('glassBlur') || 16;
 
-    panel.innerHTML = `
-        <h2>Settings</h2>
-        <p>This page is for managing application-wide settings.</p>
-        <div class="settings-item">
-            <strong>Theme:</strong> The light/dark mode toggle is in the top-right corner of the header.
-        </div>
-        <div class="settings-item">
-            <label for="blur-slider">Glass Blur Intensity: <span id="blur-value">${savedBlur}px</span></label>
-            <input type="range" id="blur-slider" min="0" max="40" value="${savedBlur}">
-        </div>
-        <div class="settings-item">
-            <strong>API Keys & Endpoints:</strong> Currently, these must be configured in the <code>.env</code> file on the server.
-        </div>
+    let formHtml = `
+        <form id="settings-form">
+            <div class="settings-item">
+                <strong>Theme:</strong> The light/dark mode toggle is in the top-right corner of the header.
+            </div>
+            <div class="settings-item">
+                <label for="blur-slider">Glass Blur Intensity: <span id="blur-value">${savedBlur}px</span></label>
+                <input type="range" id="blur-slider" min="0" max="40" value="${savedBlur}">
+            </div>
+            <h3>Server Settings</h3>
+            <p>These settings are loaded from the server's <code>.env</code> file. Changes will require a server restart to take full effect.</p>
     `;
 
+    for (const [key, value] of Object.entries(settings)) {
+        formHtml += `
+            <div class="settings-item">
+                <label for="setting-${key}">${key}</label>
+                <input type="text" id="setting-${key}" name="${key}" value="${value}">
+            </div>
+        `;
+    }
+
+    formHtml += `<button type="submit">Save All Settings</button></form>`;
+    panel.innerHTML = `<h2>Settings</h2>` + formHtml;
+
+    // --- Event Listeners ---
     const blurSlider = panel.querySelector('#blur-slider');
     const blurValueSpan = panel.querySelector('#blur-value');
 
@@ -132,6 +156,40 @@ function fetchSettings() {
 
     blurSlider.addEventListener('change', (e) => {
         localStorage.setItem('glassBlur', e.target.value);
+    });
+
+    const form = panel.querySelector('#settings-form');
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(form);
+        const newSettings = Object.fromEntries(formData.entries());
+        const submitButton = form.querySelector('button[type="submit"]');
+
+        try {
+            submitButton.textContent = 'Saving...';
+            submitButton.disabled = true;
+
+            const response = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newSettings)
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.detail || 'Failed to save settings');
+            }
+
+            const successMessage = document.createElement('p');
+            successMessage.textContent = 'Settings saved! The server is restarting. Please wait a few moments and then manually reload the page.';
+            successMessage.style.color = 'var(--accent-primary)';
+            form.appendChild(successMessage);
+
+        } catch (error) {
+            alert(`Error saving settings: ${error.message}`);
+            submitButton.textContent = 'Save All Settings';
+            submitButton.disabled = false;
+        }
     });
 }
 
@@ -332,7 +390,13 @@ function createCharacterForm(character = null) {
             return;
         }
 
-        data.narratives = narratives.map(n => ({...n, id: n.id.startsWith('new-') ? undefined : n.id }));
+        data.narratives = narratives.map(n => {
+            const newNarr = { ...n };
+            if (newNarr.id && newNarr.id.startsWith('new-')) {
+                delete newNarr.id;
+            }
+            return newNarr;
+        });
 
 
         const url = isEdit ? `/api/characters/${character.id}` : '/api/characters';
