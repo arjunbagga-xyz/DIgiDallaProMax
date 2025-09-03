@@ -1,297 +1,458 @@
-import * as THREE from 'three';
-import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
-
-let camera, scene, renderer;
-let cssScene, cssRenderer;
-let material;
-const panels = {};
-let activeTab = 'status';
-
-function init() {
-    const container = document.getElementById('scene-container');
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.z = 800;
-
-    scene = new THREE.Scene();
-    cssScene = new THREE.Scene();
-
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    container.appendChild(renderer.domElement);
-
-    cssRenderer = new CSS3DRenderer();
-    cssRenderer.setSize(window.innerWidth, window.innerHeight);
-    cssRenderer.domElement.style.position = 'absolute';
-    cssRenderer.domElement.style.top = 0;
-    container.appendChild(cssRenderer.domElement);
-
-    const uniforms = { u_time: { type: "f", value: 1.0 }, u_resolution: { type: "v2", value: new THREE.Vector2() } };
-    material = new THREE.ShaderMaterial({
-        uniforms: uniforms,
-        vertexShader: `void main() { gl_Position = vec4(position, 1.0); }`,
-        fragmentShader: `
-            uniform vec2 u_resolution; uniform float u_time;
-            float random(vec2 st) { return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123); }
-            float noise(vec2 st) {
-                vec2 i = floor(st); vec2 f = fract(st);
-                float a = random(i); float b = random(i + vec2(1.0, 0.0));
-                float c = random(i + vec2(0.0, 1.0)); float d = random(i + vec2(1.0, 1.0));
-                vec2 u = f * f * (3.0 - 2.0 * f);
-                return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
-            }
-            void main() {
-                vec2 st = gl_FragCoord.xy / u_resolution.xy;
-                st.x *= u_resolution.x / u_resolution.y;
-                float time = u_time * 0.1;
-                float n = noise(st * 3.0 + time);
-                vec3 color1 = vec3(0.0, 0.0, 1.0); vec3 color2 = vec3(1.0, 0.0, 1.0); vec3 color3 = vec3(0.0, 1.0, 1.0);
-                vec3 color = mix(color1, color2, smoothstep(0.2, 0.5, n));
-                color = mix(color, color3, smoothstep(0.5, 0.8, n));
-                gl_FragColor = vec4(color, 1.0);
-            }`
-    });
-    const plane = new THREE.PlaneGeometry(2, 2);
-    const background = new THREE.Mesh(plane, material);
-    scene.add(background);
-
-    createUIPanels();
-
-    window.addEventListener('resize', onWindowResize, false);
-    onWindowResize();
-
-    setupEventListeners();
-    fetchStatus(); // Initial data load
-}
-
-function createUIPanels() {
-    const panelElements = document.querySelectorAll('.content-panel');
-    const angleStep = Math.PI / 4;
-    const radius = 1000;
-
-    panelElements.forEach((element, index) => {
-        const object = new CSS3DObject(element);
-        const angle = (index - 1) * angleStep;
-
-        object.position.x = radius * Math.sin(angle);
-        object.position.z = radius * Math.cos(angle) - radius;
-        object.rotation.y = -angle;
-
-        cssScene.add(object);
-        panels[element.id.replace('-panel', '')] = { element, object };
-    });
-}
-
-function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    cssRenderer.setSize(window.innerWidth, window.innerHeight);
-    if (material) {
-        material.uniforms.u_resolution.value.x = renderer.domElement.width;
-        material.uniforms.u_resolution.value.y = renderer.domElement.height;
-    }
-}
-
-function animate() {
-    requestAnimationFrame(animate);
-    const time = Date.now() * 0.0005;
-    if (material) material.uniforms.u_time.value += 0.05;
-
-    // Subtle floating animation for all panels
-    Object.values(panels).forEach(({ object }) => {
-        object.position.y += Math.sin(time + object.position.x) * 0.2;
-    });
-
-    renderer.render(scene, camera);
-    cssRenderer.render(cssScene, camera);
-}
-
-function setupEventListeners() {
+document.addEventListener('DOMContentLoaded', () => {
     const nav = document.getElementById('main-nav');
+    const panels = document.querySelectorAll('.content-panel');
+    const tabs = document.querySelectorAll('.nav-tab');
+
+    // Function to switch tabs
+    const switchToTab = (tabName) => {
+        // Hide all panels
+        panels.forEach(panel => {
+            panel.style.display = 'none';
+        });
+
+        // Show the target panel
+        const targetPanel = document.getElementById(`${tabName}-panel`);
+        if (targetPanel) {
+            targetPanel.style.display = 'block';
+        }
+
+        // Update active class on tabs
+        tabs.forEach(tab => {
+            tab.classList.toggle('active', tab.dataset.tab === tabName);
+        });
+
+        // Fetch data for the tab
+        fetchDataForTab(tabName);
+    };
+
+    // Event listener for nav clicks
     nav.addEventListener('click', (event) => {
-        if (event.target.classList.contains('nav-tab')) {
-            const tabName = event.target.dataset.tab;
+        const tab = event.target.closest('.nav-tab');
+        if (tab) {
+            const tabName = tab.dataset.tab;
             switchToTab(tabName);
         }
     });
-}
 
-function switchToTab(tabName) {
-    if (!panels[tabName] || activeTab === tabName) return;
+    // Initial load
+    // I'll start with the 'characters' tab as the default
+    switchToTab('characters');
 
-    activeTab = tabName;
+    // --- Dialog Box Logic ---
+    const dialogContainer = document.getElementById('dialog-container');
+    const dialogBox = document.querySelector('.dialog-box');
+    const closeDialogButton = document.querySelector('.close-dialog');
 
-    // Update active class on nav buttons
-    document.querySelectorAll('.nav-tab').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === tabName);
-    });
-
-    // Animate camera to the target panel
-    const targetPanel = panels[tabName].object;
-    gsap.to(camera.position, {
-        duration: 1.5,
-        x: targetPanel.position.x,
-        y: targetPanel.position.y,
-        z: targetPanel.position.z + 800, // Keep a distance from the panel
-        ease: 'power3.inOut'
-    });
-    gsap.to(camera.rotation, {
-        duration: 1.5,
-        y: targetPanel.rotation.y,
-        ease: 'power3.inOut'
-    });
-
-    // Fetch data for the new tab
-    if (tabName === 'status') fetchStatus();
-    if (tabName === 'characters') fetchCharacters();
-    if (tabName === 'models') fetchModels();
-    if (tabName === 'content') fetchPrompts();
-    if (tabName === 'scheduler') fetchTasks();
-    // No fetch for training or settings tabs yet
-}
-
-// --- API Fetching and Rendering ---
-
-async function fetchStatus() {
-    const grid = document.getElementById('status-grid');
-    grid.innerHTML = '<p>Loading status...</p>';
-    try {
-        const response = await fetch('/api/system/status');
-        const data = await response.json();
-        grid.innerHTML = ''; // Clear old data
-
-        Object.entries(data).forEach(([key, value]) => {
-            const isOk = value === 'OK' || value === 'Connected' || value === 'Running' || value === 'Configured';
-            const statusClass = isOk ? 'status-ok' : 'status-error';
-            const item = document.createElement('div');
-            item.className = 'status-item';
-            item.innerHTML = `<h3>${key.replace('_', ' ').toUpperCase()}</h3><p class="${statusClass}">${value}</p>`;
-            grid.appendChild(item);
-        });
-
-    } catch (error) {
-        console.error('Failed to fetch system status:', error);
-        grid.innerHTML = `<p class="status-error">Failed to fetch system status.</p>`;
+    window.showDialog = function(title, content) {
+        document.getElementById('dialog-title').textContent = title;
+        const dialogContent = document.querySelector('.dialog-content');
+        dialogContent.innerHTML = '';
+        dialogContent.appendChild(content);
+        dialogContainer.style.display = 'flex';
     }
+
+    window.hideDialog = function() {
+        dialogContainer.style.display = 'none';
+    }
+
+    closeDialogButton.addEventListener('click', window.hideDialog);
+    dialogContainer.addEventListener('click', (e) => {
+        if (e.target === dialogContainer) {
+            window.hideDialog();
+        }
+    });
+
+    // --- Dragging Logic for Dialog ---
+    let isDragging = false;
+    let offset = { x: 0, y: 0 };
+
+    dialogBox.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.dialog-header')) {
+            isDragging = true;
+            offset.x = e.clientX - dialogBox.offsetLeft;
+            offset.y = e.clientY - dialogBox.offsetTop;
+            dialogBox.style.cursor = 'grabbing';
+        }
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+            dialogBox.style.left = `${e.clientX - offset.x}px`;
+            dialogBox.style.top = `${e.clientY - offset.y}px`;
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+        dialogBox.style.cursor = 'grab';
+    });
+
+
+    // --- Character Tab Logic ---
+    const addCharacterBtn = document.getElementById('add-character-btn');
+    addCharacterBtn.addEventListener('click', () => {
+        window.showDialog('Add New Character', createCharacterForm());
+    });
+
+    // --- Models & LoRA Training Tab Logic ---
+    const trainLoraBtn = document.getElementById('train-lora-btn');
+    trainLoraBtn.addEventListener('click', async () => {
+        const form = await createLoraTrainingForm();
+        window.showDialog('Train New LoRA', form);
+    });
+});
+
+async function createLoraTrainingForm() {
+    const form = document.createElement('form');
+
+    // Fetch characters and models in parallel
+    const [characters, models] = await Promise.all([
+        fetch('/api/characters').then(res => res.json()),
+        fetch('/api/models').then(res => res.json())
+    ]);
+
+    const characterOptions = characters.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    const modelOptions = models.map(m => `<option value="${m}">${m}</option>`).join('');
+
+    form.innerHTML = `
+        <label for="characterId">Character:</label>
+        <select id="characterId" name="characterId" required>
+            ${characterOptions}
+        </select>
+        <label for="baseModel">Base Model:</label>
+        <select id="baseModel" name="baseModel" required>
+            ${modelOptions}
+        </select>
+        <button type="submit">Start Training</button>
+    `;
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        try {
+            const response = await fetch('/api/lora/train', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Failed to start training');
+            }
+            const result = await response.json();
+            alert(`Training started! Log file: ${result.log_file}`);
+            window.hideDialog();
+        } catch (error) {
+            console.error('Error starting LoRA training:', error);
+            alert(`Error: ${error.message}`);
+        }
+    });
+
+    return form;
 }
+
+function createCharacterForm(character = {}) {
+    const form = document.createElement('form');
+    form.innerHTML = `
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" value="${character.name || ''}" required>
+        <label for="personality">Personality:</label>
+        <textarea id="personality" name="personality" required>${character.personality || ''}</textarea>
+        <label for="backstory">Backstory:</label>
+        <textarea id="backstory" name="backstory" required>${character.backstory || ''}</textarea>
+        <label for="triggerWord">Trigger Word:</label>
+        <input type="text" id="triggerWord" name="triggerWord" value="${character.triggerWord || ''}">
+        <label for="preferredModel">Preferred Model:</label>
+        <input type="text" id="preferredModel" name="preferredModel" value="${character.preferredModel || ''}">
+        <button type="submit">Save Character</button>
+    `;
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        // This is a simplified version. In a real app, you would have more complex nested objects.
+        const characterData = {
+            name: data.name,
+            personality: data.personality,
+            backstory: data.backstory,
+            triggerWord: data.triggerWord,
+            preferredModel: data.preferredModel,
+            // These are nested in the python model, so we create a default structure
+            promptSettings: {
+                basePrompt: "a photo of a character",
+                style: "cinematic",
+                mood: "neutral",
+                negativePrompt: "low quality, ugly"
+            },
+            socialMediaAccounts: {}
+        };
+
+        try {
+            const response = await fetch('/api/characters', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(characterData)
+            });
+            if (!response.ok) throw new Error('Failed to save character');
+
+            document.querySelector('.close-dialog').click(); // a bit hacky, but works
+            fetchCharacters(); // Refresh the list
+        } catch (error) {
+            console.error('Error saving character:', error);
+            // Here you would show an error to the user
+        }
+    });
+
+    return form;
+}
+
+
+// --- Data Fetching ---
 
 async function fetchCharacters() {
     const list = document.getElementById('characters-list');
     list.innerHTML = '<p>Loading characters...</p>';
     try {
         const response = await fetch('/api/characters');
-        const data = await response.json();
-        list.innerHTML = ''; // Clear old data
-
-        if (data.length === 0) {
-            list.innerHTML = '<p>No characters found. Create one to get started!</p>';
-            return;
-        }
-
-        data.forEach(char => {
-            const item = document.createElement('div');
-            item.className = 'character-item'; // You'll need to style this
-            item.innerHTML = `<h4>${char.name}</h4><p>${char.personality}</p>`;
-            list.appendChild(item);
-        });
-
+        const characters = await response.json();
+        renderCharacters(characters);
     } catch (error) {
         console.error('Failed to fetch characters:', error);
-        list.innerHTML = `<p class="status-error">Failed to fetch characters.</p>`;
+        list.innerHTML = '<p class="error">Failed to load characters.</p>';
     }
+}
+
+function renderCharacters(characters) {
+    const list = document.getElementById('characters-list');
+    list.innerHTML = '';
+
+    if (characters.length === 0) {
+        list.innerHTML = '<p>No characters found. Add one to get started!</p>';
+        return;
+    }
+
+    characters.forEach(char => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+            <h3>${char.name}</h3>
+            <p>${char.personality.substring(0, 100)}...</p>
+            <div class="card-actions">
+                <button class="edit-btn" data-id="${char.id}">Edit</button>
+                <button class="train-btn" data-id="${char.id}">Train LoRA</button>
+                <button class="delete-btn" data-id="${char.id}">Delete</button>
+            </div>
+        `;
+        list.appendChild(card);
+    });
+
+    // Add event listeners for the new buttons
+    list.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => console.log('Edit character:', e.target.dataset.id));
+    });
+    list.querySelectorAll('.train-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => console.log('Train LoRA for character:', e.target.dataset.id));
+    });
+    list.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => console.log('Delete character:', e.target.dataset.id));
+    });
 }
 
 async function fetchModels() {
     const list = document.getElementById('models-list');
-    list.innerHTML = '<p>Loading models...</p>';
+    list.innerHTML = '<h3>Available Base Models</h3><p>Loading...</p>';
     try {
         const response = await fetch('/api/models');
-        const data = await response.json();
-        list.innerHTML = ''; // Clear old data
-
-        if (data.length === 0) {
-            list.innerHTML = '<p>No models found on ComfyUI server.</p>';
-            return;
-        }
+        if (!response.ok) throw new Error('Failed to fetch models from server.');
+        const models = await response.json();
 
         const ul = document.createElement('ul');
-        data.forEach(modelName => {
+        models.forEach(modelName => {
             const li = document.createElement('li');
             li.textContent = modelName;
             ul.appendChild(li);
         });
+        list.querySelector('p').remove();
         list.appendChild(ul);
 
     } catch (error) {
         console.error('Failed to fetch models:', error);
-        list.innerHTML = `<p class="status-error">Could not connect to ComfyUI server.</p>`;
+        list.innerHTML += `<p class="error">${error.message}</p>`;
     }
 }
 
-async function fetchPrompts() {
-    const list = document.getElementById('prompts-list');
-    list.innerHTML = '<p>Loading prompts...</p>';
+async function fetchContent() {
+    const gallery = document.getElementById('content-gallery');
+    gallery.innerHTML = '<h2>Select a Character to View Content</h2>';
+    try {
+        const response = await fetch('/api/characters');
+        const characters = await response.json();
+        renderContentCharacterChooser(characters);
+    } catch (error) {
+        console.error('Failed to fetch characters for content tab:', error);
+        gallery.innerHTML = '<p class="error">Failed to load characters.</p>';
+    }
+}
+
+function renderContentCharacterChooser(characters) {
+    const gallery = document.getElementById('content-gallery');
+    gallery.innerHTML = '<h2>Select a Character to View Content</h2>';
+    const container = document.createElement('div');
+    container.className = 'card-container';
+
+    if (characters.length === 0) {
+        gallery.innerHTML += '<p>No characters found.</p>';
+        return;
+    }
+
+    characters.forEach(char => {
+        const card = document.createElement('div');
+        card.className = 'card character-content-choice';
+        card.dataset.id = char.id;
+        card.dataset.name = char.name;
+        card.innerHTML = `<h3>${char.name}</h3>`;
+        container.appendChild(card);
+    });
+
+    gallery.appendChild(container);
+
+    gallery.querySelectorAll('.character-content-choice').forEach(card => {
+        card.addEventListener('click', (e) => {
+            const charId = e.currentTarget.dataset.id;
+            const charName = e.currentTarget.dataset.name;
+            fetchPromptsForCharacter(charId, charName);
+        });
+    });
+}
+
+async function fetchPromptsForCharacter(characterId, characterName) {
+    const gallery = document.getElementById('content-gallery');
+    gallery.innerHTML = `<h2>Content for ${characterName}</h2><p>Loading prompts...</p>`;
     try {
         const response = await fetch('/api/prompts');
-        const data = await response.json();
-        list.innerHTML = ''; // Clear old data
-
-        if (data.length === 0) {
-            list.innerHTML = '<p>No prompts have been generated yet.</p>';
-            return;
-        }
-
-        data.forEach(prompt => {
-            const item = document.createElement('div');
-            item.className = 'prompt-item'; // Style this
-            item.innerHTML = `
-                <h4>For: ${prompt.characterName}</h4>
-                <p><strong>Prompt:</strong> ${prompt.prompt}</p>
-                <p><strong>Caption:</strong> ${prompt.caption || 'Not generated'}</p>
-                <small>Used: ${prompt.used}</small>
-            `;
-            list.appendChild(item);
-        });
-
+        const allPrompts = await response.json();
+        const characterPrompts = allPrompts.filter(p => p.characterId === characterId);
+        renderPromptGallery(characterPrompts, characterId, characterName);
     } catch (error) {
-        console.error('Failed to fetch prompts:', error);
-        list.innerHTML = `<p class="status-error">Failed to fetch prompts.</p>`;
+        console.error(`Failed to fetch prompts for ${characterName}:`, error);
+        gallery.innerHTML += `<p class="error">Failed to load prompts.</p>`;
     }
 }
 
-async function fetchTasks() {
-    const list = document.getElementById('tasks-list');
-    list.innerHTML = '<p>Loading scheduled tasks...</p>';
+function renderPromptGallery(prompts, characterId, characterName) {
+    const gallery = document.getElementById('content-gallery');
+    gallery.innerHTML = `
+        <div class="gallery-header">
+            <h2>Content for ${characterName}</h2>
+            <button id="back-to-chars-btn">&larr; Back to Characters</button>
+        </div>
+        <div class="gallery-controls">
+             <!-- Sorting/filtering controls will go here -->
+        </div>
+        <div class="prompt-gallery-container card-container"></div>
+    `;
+
+    const container = gallery.querySelector('.prompt-gallery-container');
+    if (prompts.length === 0) {
+        container.innerHTML = '<p>No content found for this character.</p>';
+        return;
+    }
+
+    prompts.forEach(prompt => {
+        const card = document.createElement('div');
+        card.className = 'card prompt-card';
+        card.innerHTML = `
+            <p><strong>Prompt:</strong> ${prompt.prompt}</p>
+            <p><strong>Caption:</strong> ${prompt.caption || 'N/A'}</p>
+            <small>Posted: ${prompt.used ? 'Yes' : 'No'} | Created: ${new Date(prompt.createdAt).toLocaleDateString()}</small>
+            <div class="card-actions">
+                <button class="delete-prompt-btn" data-id="${prompt.id}">Delete</button>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+
+    // Event listener for back button
+    gallery.querySelector('#back-to-chars-btn').addEventListener('click', fetchContent);
+
+    // Event listeners for delete buttons
+    gallery.querySelectorAll('.delete-prompt-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const promptId = e.target.dataset.id;
+            if (confirm('Are you sure you want to delete this prompt?')) {
+                try {
+                    const response = await fetch(`/api/prompts/${promptId}`, { method: 'DELETE' });
+                    if (!response.ok) throw new Error('Failed to delete prompt');
+                    fetchPromptsForCharacter(characterId, characterName); // Refresh
+                } catch (error) {
+                    console.error('Error deleting prompt:', error);
+                    alert('Could not delete the prompt.');
+                }
+            }
+        });
+    });
+}
+
+
+async function fetchStatus() {
+    const grid = document.getElementById('status-grid');
+    grid.innerHTML = '<p>Loading system status...</p>';
     try {
-        const response = await fetch('/api/scheduler/tasks');
+        const response = await fetch('/api/system/status');
         const data = await response.json();
-        list.innerHTML = ''; // Clear old data
-
-        if (data.length === 0) {
-            list.innerHTML = '<p>No scheduled tasks found.</p>';
-            return;
-        }
-
-        data.forEach(task => {
-            const item = document.createElement('div');
-            item.className = 'task-item'; // Style this
-            item.innerHTML = `
-                <h4>Task: ${task.type}</h4>
-                <p>For Character ID: ${task.characterId}</p>
-                <p>Schedule (Cron): <code>${task.schedule}</code></p>
-                <p>Status: ${task.active ? 'Active' : 'Paused'}</p>
-            `;
-            list.appendChild(item);
-        });
-
+        renderStatus(data);
     } catch (error) {
-        console.error('Failed to fetch scheduled tasks:', error);
-        list.innerHTML = `<p class="status-error">Failed to fetch tasks.</p>`;
+        console.error('Failed to fetch system status:', error);
+        grid.innerHTML = `<p class="error">Failed to fetch system status.</p>`;
     }
 }
 
+function renderStatus(data) {
+    const grid = document.getElementById('status-grid');
+    grid.innerHTML = ''; // Clear old data
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(200px, 1fr))';
+    grid.style.gap = '1rem';
 
-// --- Main Execution ---
-init();
-animate();
+
+    Object.entries(data).forEach(([key, value]) => {
+        const isOk = value === 'OK' || value === 'Connected' || value === 'Running' || value === 'Configured';
+        const statusClass = isOk ? 'status-ok' : 'status-error';
+
+        const item = document.createElement('div');
+        item.className = 'card';
+        item.innerHTML = `
+            <h3>${key.replace('_', ' ').toUpperCase()}</h3>
+            <p class="${statusClass}" style="font-weight: bold; color: ${isOk ? '#4ade80' : '#f87171'};">${value}</p>
+        `;
+        grid.appendChild(item);
+    });
+}
+
+function fetchSettings() {
+    const settingsForm = document.getElementById('settings-form');
+    settingsForm.innerHTML = `
+        <p>Application settings and API key management will be available here in a future update.</p>
+        <p>For now, please configure settings in the <code>.env</code> file.</p>
+    `;
+}
+
+// A placeholder for now, will be expanded in later steps
+async function fetchDataForTab(tabName) {
+    console.log(`Fetching data for ${tabName}...`);
+    if (tabName === 'characters') {
+        await fetchCharacters();
+    } else if (tabName === 'models') {
+        await fetchModels();
+    } else if (tabName === 'content') {
+        await fetchContent();
+    } else if (tabName === 'status') {
+        await fetchStatus();
+    } else if (tabName === 'settings') {
+        fetchSettings();
+    }
+}

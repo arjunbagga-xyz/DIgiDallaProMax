@@ -7,79 +7,63 @@
     <link rel="stylesheet" href="/frontend/css/style.css">
 </head>
 <body>
-    <!-- The container for the 3D scene -->
-    <div id="scene-container"></div>
-
-    <!-- The container for the HTML UI elements that will be placed in the 3D scene -->
-    <div id="ui-container">
+    <div class="background"></div>
+    <div id="app-container">
         <nav id="main-nav">
-            <button class="nav-tab" data-tab="status">Status</button>
-            <button class="nav-tab" data-tab="characters">Characters</button>
-            <button class="nav-tab" data-tab="models">Models</button>
+            <button class="nav-tab active" data-tab="characters">Characters</button>
+            <button class="nav-tab" data-tab="models">Models & LoRA Training</button>
             <button class="nav-tab" data-tab="content">Content</button>
-            <button class="nav-tab" data-tab="training">LoRAs & Training</button>
-            <button class="nav-tab" data-tab="scheduler">Scheduler</button>
+            <button class="nav-tab" data-tab="status">Status</button>
             <button class="nav-tab" data-tab="settings">Settings</button>
         </nav>
 
         <main id="content-panels">
-            <!-- Status Panel -->
-            <div id="status-panel" class="content-panel">
-                <h2>System Status</h2>
-                <div id="status-grid"></div>
-            </div>
-
             <!-- Characters Panel -->
-            <div id="characters-panel" class="content-panel" style="display: none;">
+            <div id="characters-panel" class="content-panel">
                 <h2>Characters</h2>
-                <div id="characters-list"></div>
-                <button id="add-character-btn">Add Character</button>
+                <div id="characters-list" class="card-container"></div>
+                <button id="add-character-btn" class="fab">+</button>
             </div>
 
-            <!-- Models Panel -->
+            <!-- Models & LoRA Training Panel -->
             <div id="models-panel" class="content-panel" style="display: none;">
-                <h2>Available Models</h2>
+                <h2>Models & LoRA Training</h2>
                 <div id="models-list"></div>
+                <button id="train-lora-btn">Train New LoRA</button>
             </div>
 
             <!-- Content Panel -->
             <div id="content-panel" class="content-panel" style="display: none;">
-                <h2>Content & Prompts</h2>
-                <div id="prompts-list"></div>
+                <h2>Content Gallery</h2>
+                <div id="content-gallery"></div>
             </div>
 
-            <!-- Training Panel -->
-            <div id="training-panel" class="content-panel" style="display: none;">
-                <h2>LoRAs & Training</h2>
-                <p>Trigger a new LoRA training job for a character.</p>
-                <!-- Training form will go here -->
-            </div>
-
-            <!-- Scheduler Panel -->
-            <div id="scheduler-panel" class="content-panel" style="display: none;">
-                <h2>Task Scheduler</h2>
-                <div id="tasks-list"></div>
+            <!-- Status Panel -->
+            <div id="status-panel" class="content-panel" style="display: none;">
+                <h2>System Status</h2>
+                <div id="status-grid"></div>
             </div>
 
             <!-- Settings Panel -->
             <div id="settings-panel" class="content-panel" style="display: none;">
                 <h2>Settings</h2>
-                <p>Application settings and API key management will be available here.</p>
+                <div id="settings-form"></div>
             </div>
         </main>
     </div>
 
-    <!-- Three.js and other libraries from CDN -->
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
-            }
-        }
-    </script>
-    <!-- GSAP for animations -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <!-- Dialog Box Container -->
+    <div id="dialog-container" style="display: none;">
+        <div class="dialog-box" id="character-dialog">
+            <div class="dialog-header">
+                <h3 id="dialog-title">Add Character</h3>
+                <button class="close-dialog">&times;</button>
+            </div>
+            <div class="dialog-content">
+                <!-- Form will be injected here by JS -->
+            </div>
+        </div>
+    </div>
 
     <script type="module" src="/frontend/js/main.js"></script>
 </body>
