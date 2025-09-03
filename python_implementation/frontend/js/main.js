@@ -1,59 +1,55 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // --- Theme Switcher ---
+    const themeToggle = document.getElementById('theme-toggle');
+    themeToggle.addEventListener('change', () => {
+        document.body.classList.toggle('light-mode', themeToggle.checked);
+    });
+
+    // --- Tab Switching ---
     const nav = document.getElementById('main-nav');
-    const panels = document.querySelectorAll('.content-panel');
+    const contentPanels = document.querySelectorAll('.content-panel');
     const tabs = document.querySelectorAll('.nav-tab');
 
-    // Function to switch tabs
-    const switchToTab = (tabName) => {
-        // Hide all panels
-        panels.forEach(panel => {
-            panel.style.display = 'none';
-        });
+    nav.addEventListener('click', (event) => {
+        const tabButton = event.target.closest('.nav-tab');
+        if (!tabButton) return;
 
-        // Show the target panel
-        const targetPanel = document.getElementById(`${tabName}-panel`);
-        if (targetPanel) {
-            targetPanel.style.display = 'block';
-        }
+        const tabName = tabButton.dataset.tab;
 
         // Update active class on tabs
         tabs.forEach(tab => {
             tab.classList.toggle('active', tab.dataset.tab === tabName);
         });
 
-        // Fetch data for the tab
-        fetchDataForTab(tabName);
-    };
+        // Show the correct panel
+        contentPanels.forEach(panel => {
+            if (panel.id === `${tabName}-panel`) {
+                panel.style.display = 'block';
+            } else {
+                panel.style.display = 'none';
+            }
+        });
 
-    // Event listener for nav clicks
-    nav.addEventListener('click', (event) => {
-        const tab = event.target.closest('.nav-tab');
-        if (tab) {
-            const tabName = tab.dataset.tab;
-            switchToTab(tabName);
-        }
+        fetchDataForTab(tabName);
     });
 
-    // Initial load
-    // I'll start with the 'characters' tab as the default
-    switchToTab('characters');
-
-    // --- Dialog Box Logic ---
+    // --- Dialog Management ---
     const dialogContainer = document.getElementById('dialog-container');
     const dialogBox = document.querySelector('.dialog-box');
     const closeDialogButton = document.querySelector('.close-dialog');
+    const dialogTitle = document.getElementById('dialog-title');
+    const dialogContent = document.querySelector('.dialog-content');
 
-    window.showDialog = function(title, content) {
-        document.getElementById('dialog-title').textContent = title;
-        const dialogContent = document.querySelector('.dialog-content');
+    window.showDialog = (title, content) => {
+        dialogTitle.textContent = title;
         dialogContent.innerHTML = '';
         dialogContent.appendChild(content);
         dialogContainer.style.display = 'flex';
-    }
+    };
 
-    window.hideDialog = function() {
+    window.hideDialog = () => {
         dialogContainer.style.display = 'none';
-    }
+    };
 
     closeDialogButton.addEventListener('click', window.hideDialog);
     dialogContainer.addEventListener('click', (e) => {
@@ -62,74 +58,360 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- Dragging Logic for Dialog ---
+    makeDraggable(dialogBox);
+
+    // Set initial tab
+    document.querySelector('.nav-tab[data-tab="characters"]').click();
+});
+
+function makeDraggable(element, handle) {
     let isDragging = false;
     let offset = { x: 0, y: 0 };
+    const moveHandle = handle || element;
 
-    dialogBox.addEventListener('mousedown', (e) => {
-        if (e.target.closest('.dialog-header')) {
-            isDragging = true;
-            offset.x = e.clientX - dialogBox.offsetLeft;
-            offset.y = e.clientY - dialogBox.offsetTop;
-            dialogBox.style.cursor = 'grabbing';
+    moveHandle.style.cursor = 'move';
+
+    moveHandle.addEventListener('mousedown', (e) => {
+        isDragging = true;
+
+        // If the element is position static, we need to make it absolute
+        if (window.getComputedStyle(element).position === 'static') {
+            element.style.position = 'absolute';
         }
+
+        const rect = element.getBoundingClientRect();
+        offset.x = e.clientX - rect.left;
+        offset.y = e.clientY - rect.top;
+        moveHandle.style.cursor = 'grabbing';
+        element.style.zIndex = 1001; // Bring to front
+        e.stopPropagation();
     });
 
     document.addEventListener('mousemove', (e) => {
         if (isDragging) {
-            dialogBox.style.left = `${e.clientX - offset.x}px`;
-            dialogBox.style.top = `${e.clientY - offset.y}px`;
+            element.style.left = `${e.clientX - offset.x}px`;
+            element.style.top = `${e.clientY - offset.y}px`;
         }
     });
 
     document.addEventListener('mouseup', () => {
-        isDragging = false;
-        dialogBox.style.cursor = 'grab';
+        if (isDragging) {
+            isDragging = false;
+            moveHandle.style.cursor = 'move';
+            element.style.zIndex = ''; // Reset z-index
+        }
+    });
+}
+
+// --- Data Fetching Router ---
+function fetchDataForTab(tabName) {
+    console.log(`Fetching data for ${tabName}...`);
+    if (tabName === 'characters') {
+        fetchCharacters();
+    } else if (tabName === 'models') {
+        fetchModelsAndLoras();
+    } else if (tabName === 'content') {
+        fetchContent();
+    } else if (tabName === 'status') {
+        fetchStatus();
+    } else if (tabName === 'settings') {
+        fetchSettings();
+    }
+}
+
+// --- Characters Tab ---
+async function fetchCharacters() {
+    const panel = document.getElementById('characters-panel');
+    panel.innerHTML = `<h2>Characters</h2><div class="card-container">Loading...</div><button id="add-character-btn" class="fab">+</button>`;
+
+    // Re-add event listener for the new button
+    panel.querySelector('#add-character-btn').addEventListener('click', handleAddCharacter);
+
+    try {
+        const response = await fetch('/api/characters');
+        if (!response.ok) throw new Error('Failed to fetch characters');
+        const characters = await response.json();
+        renderCharacters(characters);
+    } catch (error) {
+        console.error(error);
+        panel.querySelector('.card-container').innerHTML = `<p class="error">${error.message}</p>`;
+    }
+}
+
+// --- Settings Tab ---
+function fetchSettings() {
+    const panel = document.getElementById('settings-panel');
+    panel.innerHTML = `
+        <h2>Settings</h2>
+        <p>This page is for managing application-wide settings.</p>
+        <div class="settings-item">
+            <strong>Theme:</strong> The light/dark mode toggle is in the top-right corner of the header.
+        </div>
+        <div class="settings-item">
+            <strong>API Keys & Endpoints:</strong> Currently, these must be configured in the <code>.env</code> file on the server.
+        </div>
+    `;
+}
+
+function renderCharacters(characters) {
+    const container = document.querySelector('#characters-panel .card-container');
+    container.innerHTML = '';
+    if (characters.length === 0) {
+        container.innerHTML = '<p>No characters found. Add one to get started!</p>';
+        return;
+    }
+    characters.forEach(char => {
+        const card = document.createElement('div');
+        card.className = 'card character-card'; // Add specific class
+        card.innerHTML = `
+            <h3>${char.name}</h3>
+            <p>${char.personality.substring(0, 100)}...</p>
+            <div class="card-actions">
+                <button class="edit-btn" data-id="${char.id}">Edit</button>
+                <button class="delete-btn" data-id="${char.id}">Delete</button>
+            </div>
+        `;
+        container.appendChild(card);
+        makeDraggable(card); // Make the card draggable
     });
 
+    // Add event listeners
+    container.querySelectorAll('.edit-btn').forEach(btn => btn.addEventListener('click', handleEditCharacter));
+    container.querySelectorAll('.delete-btn').forEach(btn => btn.addEventListener('click', handleDeleteCharacter));
+}
 
-    // --- Character Tab Logic ---
-    const addCharacterBtn = document.getElementById('add-character-btn');
-    addCharacterBtn.addEventListener('click', () => {
-        window.showDialog('Add New Character', createCharacterForm());
+function handleAddCharacter() {
+    const form = createCharacterForm();
+    window.showDialog('Add New Character', form);
+}
+
+async function handleEditCharacter(event) {
+    const charId = event.target.dataset.id;
+    try {
+        const response = await fetch(`/api/characters/${charId}`);
+        if (!response.ok) throw new Error('Failed to fetch character details');
+        const character = await response.json();
+        const form = createCharacterForm(character);
+        window.showDialog(`Edit ${character.name}`, form);
+    } catch (error) {
+        console.error(error);
+        alert('Could not load character data for editing.');
+    }
+}
+
+async function handleDeleteCharacter(event) {
+    const charId = event.target.dataset.id;
+    if (confirm('Are you sure you want to delete this character? This action cannot be undone.')) {
+        try {
+            const response = await fetch(`/api/characters/${charId}`, { method: 'DELETE' });
+            if (!response.ok) throw new Error('Failed to delete character');
+            fetchCharacters(); // Refresh the list
+        } catch (error) {
+            console.error(error);
+            alert('Could not delete character.');
+        }
+    }
+}
+
+function createCharacterForm(character = null) {
+    const isEdit = character !== null;
+    let narratives = isEdit ? [...character.narratives] : [];
+
+    const formWrapper = document.createElement('div');
+    const form = document.createElement('form');
+    form.id = 'character-form';
+
+    const name = character ? character.name : '';
+    const personality = character ? character.personality : '';
+    const backstory = character ? character.backstory : '';
+    const promptSettings = character ? JSON.stringify(character.promptSettings, null, 2) : JSON.stringify({ basePrompt: "", negativePrompt: "", style: "", mood: "" }, null, 2);
+
+    form.innerHTML = `
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" value="${name}" required>
+
+        <label for="personality">Personality</label>
+        <textarea id="personality" name="personality" rows="4" required>${personality}</textarea>
+
+        <label for="backstory">Backstory</label>
+        <textarea id="backstory" name="backstory" rows="4" required>${backstory}</textarea>
+
+        <label for="promptSettings">Prompt Settings (JSON)</label>
+        <textarea id="promptSettings" name="promptSettings" rows="6" required>${promptSettings}</textarea>
+    `;
+
+    formWrapper.appendChild(form);
+
+    if (isEdit) {
+        const narrativeSection = document.createElement('div');
+        narrativeSection.id = 'narrative-section';
+        narrativeSection.innerHTML = '<h3>Narratives</h3><div id="narrative-list"></div><button type="button" id="add-narrative-btn">Add Narrative</button>';
+        formWrapper.appendChild(narrativeSection);
+
+        const renderNarratives = () => {
+            const list = narrativeSection.querySelector('#narrative-list');
+            list.innerHTML = '';
+            narratives.forEach((narr, index) => {
+                const item = document.createElement('div');
+                item.className = 'narrative-item card';
+                item.innerHTML = `
+                    <strong>${narr.title}</strong>
+                    <p>${narr.description}</p>
+                    <small>${new Date(narr.startDate).toLocaleDateString()} - ${new Date(narr.endDate).toLocaleDateString()}</small>
+                    <div class="card-actions">
+                        <button type="button" class="edit-narrative-btn" data-index="${index}">Edit</button>
+                        <button type="button" class="delete-narrative-btn delete-btn" data-index="${index}">Delete</button>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+
+            list.querySelectorAll('.delete-narrative-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    const index = e.target.dataset.index;
+                    narratives.splice(index, 1);
+                    renderNarratives();
+                };
+            });
+            // Edit functionality can be added here in a similar way
+        };
+
+        narrativeSection.querySelector('#add-narrative-btn').onclick = () => {
+            // For simplicity, we'll add a blank narrative. A real implementation
+            // would use another form/dialog here.
+            narratives.push({
+                id: `new-${Date.now()}`, // Temp ID
+                title: 'New Narrative',
+                description: '',
+                startDate: new Date().toISOString(),
+                endDate: new Date().toISOString(),
+            });
+            renderNarratives();
+        };
+
+        renderNarratives();
+    }
+
+    const submitButton = document.createElement('button');
+    submitButton.type = 'submit';
+    submitButton.textContent = isEdit ? 'Save Changes' : 'Create Character';
+    form.appendChild(submitButton);
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(form);
+        let data = Object.fromEntries(formData.entries());
+
+        try {
+            data.promptSettings = JSON.parse(data.promptSettings);
+        } catch (error) {
+            alert('Invalid JSON in Prompt Settings.');
+            return;
+        }
+
+        data.narratives = narratives.map(n => ({...n, id: n.id.startsWith('new-') ? undefined : n.id }));
+
+
+        const url = isEdit ? `/api/characters/${character.id}` : '/api/characters';
+        const method = isEdit ? 'PUT' : 'POST';
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.detail || `Failed to ${isEdit ? 'update' : 'create'} character`);
+            }
+            window.hideDialog();
+            fetchCharacters(); // Refresh list
+        } catch (error) {
+            console.error(error);
+            alert(error.message);
+        }
     });
 
-    // --- Models & LoRA Training Tab Logic ---
-    const trainLoraBtn = document.getElementById('train-lora-btn');
-    trainLoraBtn.addEventListener('click', async () => {
-        const form = await createLoraTrainingForm();
-        window.showDialog('Train New LoRA', form);
-    });
-});
+    return formWrapper;
+}
+
+// --- Models & LoRA Training Tab ---
+async function fetchModelsAndLoras() {
+    const panel = document.getElementById('models-panel');
+    panel.innerHTML = `
+        <div class="models-header">
+            <h2>Models & LoRA Training</h2>
+            <button id="train-lora-btn">Train New LoRA</button>
+        </div>
+        <div id="base-models-section">
+            <h3>Base Models</h3>
+            <div class="card-container">Loading...</div>
+        </div>
+        <div id="loras-section">
+            <h3>LoRAs</h3>
+            <div class="card-container"><p>LoRA listing is not yet supported by the API.</p></div>
+        </div>
+        <div id="training-jobs-section">
+            <h3>Training Jobs</h3>
+            <div class="card-container"><p>Training job progress is not yet supported by the API.</p></div>
+        </div>
+    `;
+
+    panel.querySelector('#train-lora-btn').addEventListener('click', handleTrainLora);
+
+    try {
+        const response = await fetch('/api/models');
+        if (!response.ok) throw new Error('Failed to fetch base models');
+        const models = await response.json();
+        const container = panel.querySelector('#base-models-section .card-container');
+        container.innerHTML = '';
+        models.forEach(model => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.textContent = model;
+            container.appendChild(card);
+        });
+    } catch (error) {
+        console.error(error);
+        panel.querySelector('#base-models-section .card-container').innerHTML = `<p class="error">${error.message}</p>`;
+    }
+}
+
+async function handleTrainLora() {
+    const form = await createLoraTrainingForm();
+    window.showDialog('Train New LoRA', form);
+}
 
 async function createLoraTrainingForm() {
     const form = document.createElement('form');
 
-    // Fetch characters and models in parallel
-    const [characters, models] = await Promise.all([
-        fetch('/api/characters').then(res => res.json()),
-        fetch('/api/models').then(res => res.json())
-    ]);
+    try {
+        const [characters, models] = await Promise.all([
+            fetch('/api/characters').then(res => res.json()),
+            fetch('/api/models').then(res => res.json())
+        ]);
 
-    const characterOptions = characters.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-    const modelOptions = models.map(m => `<option value="${m}">${m}</option>`).join('');
+        const characterOptions = characters.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        const modelOptions = models.map(m => `<option value="${m}">${m}</option>`).join('');
 
-    form.innerHTML = `
-        <label for="characterId">Character:</label>
-        <select id="characterId" name="characterId" required>
-            ${characterOptions}
-        </select>
-        <label for="baseModel">Base Model:</label>
-        <select id="baseModel" name="baseModel" required>
-            ${modelOptions}
-        </select>
-        <button type="submit">Start Training</button>
-    `;
+        form.innerHTML = `
+            <label for="characterId">Character</label>
+            <select id="characterId" name="characterId" required>${characterOptions}</select>
+            <label for="baseModel">Base Model</label>
+            <select id="baseModel" name="baseModel" required>${modelOptions}</select>
+            <p style="font-size: 0.8rem; opacity: 0.7;">Note: Image selection is not yet supported by the backend.</p>
+            <button type="submit">Start Training</button>
+        `;
+    } catch (error) {
+        form.innerHTML = `<p class="error">Could not load data for form. ${error.message}</p>`;
+    }
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const formData = new FormData(form);
         const data = Object.fromEntries(formData.entries());
+        data.image_paths = []; // Add empty array as it's required by the model
 
         try {
             const response = await fetch('/api/lora/train', {
@@ -142,7 +424,7 @@ async function createLoraTrainingForm() {
                 throw new Error(error.detail || 'Failed to start training');
             }
             const result = await response.json();
-            alert(`Training started! Log file: ${result.log_file}`);
+            alert(`Training started successfully! Log file: ${result.log_file}`);
             window.hideDialog();
         } catch (error) {
             console.error('Error starting LoRA training:', error);
@@ -153,306 +435,128 @@ async function createLoraTrainingForm() {
     return form;
 }
 
-function createCharacterForm(character = {}) {
-    const form = document.createElement('form');
-    form.innerHTML = `
-        <label for="name">Name:</label>
-        <input type="text" id="name" name="name" value="${character.name || ''}" required>
-        <label for="personality">Personality:</label>
-        <textarea id="personality" name="personality" required>${character.personality || ''}</textarea>
-        <label for="backstory">Backstory:</label>
-        <textarea id="backstory" name="backstory" required>${character.backstory || ''}</textarea>
-        <label for="triggerWord">Trigger Word:</label>
-        <input type="text" id="triggerWord" name="triggerWord" value="${character.triggerWord || ''}">
-        <label for="preferredModel">Preferred Model:</label>
-        <input type="text" id="preferredModel" name="preferredModel" value="${character.preferredModel || ''}">
-        <button type="submit">Save Character</button>
-    `;
-
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-
-        // This is a simplified version. In a real app, you would have more complex nested objects.
-        const characterData = {
-            name: data.name,
-            personality: data.personality,
-            backstory: data.backstory,
-            triggerWord: data.triggerWord,
-            preferredModel: data.preferredModel,
-            // These are nested in the python model, so we create a default structure
-            promptSettings: {
-                basePrompt: "a photo of a character",
-                style: "cinematic",
-                mood: "neutral",
-                negativePrompt: "low quality, ugly"
-            },
-            socialMediaAccounts: {}
-        };
-
-        try {
-            const response = await fetch('/api/characters', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(characterData)
-            });
-            if (!response.ok) throw new Error('Failed to save character');
-
-            document.querySelector('.close-dialog').click(); // a bit hacky, but works
-            fetchCharacters(); // Refresh the list
-        } catch (error) {
-            console.error('Error saving character:', error);
-            // Here you would show an error to the user
-        }
-    });
-
-    return form;
-}
-
-
-// --- Data Fetching ---
-
-async function fetchCharacters() {
-    const list = document.getElementById('characters-list');
-    list.innerHTML = '<p>Loading characters...</p>';
-    try {
-        const response = await fetch('/api/characters');
-        const characters = await response.json();
-        renderCharacters(characters);
-    } catch (error) {
-        console.error('Failed to fetch characters:', error);
-        list.innerHTML = '<p class="error">Failed to load characters.</p>';
-    }
-}
-
-function renderCharacters(characters) {
-    const list = document.getElementById('characters-list');
-    list.innerHTML = '';
-
-    if (characters.length === 0) {
-        list.innerHTML = '<p>No characters found. Add one to get started!</p>';
-        return;
-    }
-
-    characters.forEach(char => {
-        const card = document.createElement('div');
-        card.className = 'card';
-        card.innerHTML = `
-            <h3>${char.name}</h3>
-            <p>${char.personality.substring(0, 100)}...</p>
-            <div class="card-actions">
-                <button class="edit-btn" data-id="${char.id}">Edit</button>
-                <button class="train-btn" data-id="${char.id}">Train LoRA</button>
-                <button class="delete-btn" data-id="${char.id}">Delete</button>
-            </div>
-        `;
-        list.appendChild(card);
-    });
-
-    // Add event listeners for the new buttons
-    list.querySelectorAll('.edit-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => console.log('Edit character:', e.target.dataset.id));
-    });
-    list.querySelectorAll('.train-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => console.log('Train LoRA for character:', e.target.dataset.id));
-    });
-    list.querySelectorAll('.delete-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => console.log('Delete character:', e.target.dataset.id));
-    });
-}
-
-async function fetchModels() {
-    const list = document.getElementById('models-list');
-    list.innerHTML = '<h3>Available Base Models</h3><p>Loading...</p>';
-    try {
-        const response = await fetch('/api/models');
-        if (!response.ok) throw new Error('Failed to fetch models from server.');
-        const models = await response.json();
-
-        const ul = document.createElement('ul');
-        models.forEach(modelName => {
-            const li = document.createElement('li');
-            li.textContent = modelName;
-            ul.appendChild(li);
-        });
-        list.querySelector('p').remove();
-        list.appendChild(ul);
-
-    } catch (error) {
-        console.error('Failed to fetch models:', error);
-        list.innerHTML += `<p class="error">${error.message}</p>`;
-    }
-}
-
+// --- Content Tab ---
 async function fetchContent() {
-    const gallery = document.getElementById('content-gallery');
-    gallery.innerHTML = '<h2>Select a Character to View Content</h2>';
+    const panel = document.getElementById('content-panel');
+    panel.innerHTML = `<h2>Content</h2><p>Select a character to view their generated content.</p><div class="card-container">Loading characters...</div>`;
+
     try {
         const response = await fetch('/api/characters');
+        if (!response.ok) throw new Error('Failed to fetch characters');
         const characters = await response.json();
-        renderContentCharacterChooser(characters);
-    } catch (error) {
-        console.error('Failed to fetch characters for content tab:', error);
-        gallery.innerHTML = '<p class="error">Failed to load characters.</p>';
-    }
-}
 
-function renderContentCharacterChooser(characters) {
-    const gallery = document.getElementById('content-gallery');
-    gallery.innerHTML = '<h2>Select a Character to View Content</h2>';
-    const container = document.createElement('div');
-    container.className = 'card-container';
+        const container = panel.querySelector('.card-container');
+        container.innerHTML = '';
+        if (characters.length === 0) {
+            container.innerHTML = '<p>No characters found. Add a character first.</p>';
+            return;
+        }
 
-    if (characters.length === 0) {
-        gallery.innerHTML += '<p>No characters found.</p>';
-        return;
-    }
-
-    characters.forEach(char => {
-        const card = document.createElement('div');
-        card.className = 'card character-content-choice';
-        card.dataset.id = char.id;
-        card.dataset.name = char.name;
-        card.innerHTML = `<h3>${char.name}</h3>`;
-        container.appendChild(card);
-    });
-
-    gallery.appendChild(container);
-
-    gallery.querySelectorAll('.character-content-choice').forEach(card => {
-        card.addEventListener('click', (e) => {
-            const charId = e.currentTarget.dataset.id;
-            const charName = e.currentTarget.dataset.name;
-            fetchPromptsForCharacter(charId, charName);
+        characters.forEach(char => {
+            const card = document.createElement('div');
+            card.className = 'card content-char-card';
+            card.dataset.id = char.id;
+            card.dataset.name = char.name;
+            card.innerHTML = `<h3>${char.name}</h3>`;
+            container.appendChild(card);
         });
-    });
+
+        container.querySelectorAll('.content-char-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                const charId = e.currentTarget.dataset.id;
+                const charName = e.currentTarget.dataset.name;
+                showContentGallery(charId, charName);
+            });
+        });
+
+    } catch (error) {
+        console.error(error);
+        panel.querySelector('.card-container').innerHTML = `<p class="error">${error.message}</p>`;
+    }
 }
 
-async function fetchPromptsForCharacter(characterId, characterName) {
-    const gallery = document.getElementById('content-gallery');
-    gallery.innerHTML = `<h2>Content for ${characterName}</h2><p>Loading prompts...</p>`;
+async function showContentGallery(characterId, characterName) {
+    const galleryContent = document.createElement('div');
+    galleryContent.className = 'gallery-container';
+    galleryContent.innerHTML = `<div class="card-container">Loading content...</div>`;
+
+    window.showDialog(`Content for ${characterName}`, galleryContent);
+
     try {
         const response = await fetch('/api/prompts');
+        if (!response.ok) throw new Error('Failed to fetch prompts');
         const allPrompts = await response.json();
-        const characterPrompts = allPrompts.filter(p => p.characterId === characterId);
-        renderPromptGallery(characterPrompts, characterId, characterName);
-    } catch (error) {
-        console.error(`Failed to fetch prompts for ${characterName}:`, error);
-        gallery.innerHTML += `<p class="error">Failed to load prompts.</p>`;
-    }
-}
+        const charPrompts = allPrompts.filter(p => p.characterId === characterId);
 
-function renderPromptGallery(prompts, characterId, characterName) {
-    const gallery = document.getElementById('content-gallery');
-    gallery.innerHTML = `
-        <div class="gallery-header">
-            <h2>Content for ${characterName}</h2>
-            <button id="back-to-chars-btn">&larr; Back to Characters</button>
-        </div>
-        <div class="gallery-controls">
-             <!-- Sorting/filtering controls will go here -->
-        </div>
-        <div class="prompt-gallery-container card-container"></div>
-    `;
+        const container = galleryContent.querySelector('.card-container');
+        container.innerHTML = '';
 
-    const container = gallery.querySelector('.prompt-gallery-container');
-    if (prompts.length === 0) {
-        container.innerHTML = '<p>No content found for this character.</p>';
-        return;
-    }
+        if (charPrompts.length === 0) {
+            container.innerHTML = '<p>No content found for this character.</p>';
+            return;
+        }
 
-    prompts.forEach(prompt => {
-        const card = document.createElement('div');
-        card.className = 'card prompt-card';
-        card.innerHTML = `
-            <p><strong>Prompt:</strong> ${prompt.prompt}</p>
-            <p><strong>Caption:</strong> ${prompt.caption || 'N/A'}</p>
-            <small>Posted: ${prompt.used ? 'Yes' : 'No'} | Created: ${new Date(prompt.createdAt).toLocaleDateString()}</small>
-            <div class="card-actions">
-                <button class="delete-prompt-btn" data-id="${prompt.id}">Delete</button>
-            </div>
-        `;
-        container.appendChild(card);
-    });
-
-    // Event listener for back button
-    gallery.querySelector('#back-to-chars-btn').addEventListener('click', fetchContent);
-
-    // Event listeners for delete buttons
-    gallery.querySelectorAll('.delete-prompt-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const promptId = e.target.dataset.id;
-            if (confirm('Are you sure you want to delete this prompt?')) {
-                try {
-                    const response = await fetch(`/api/prompts/${promptId}`, { method: 'DELETE' });
-                    if (!response.ok) throw new Error('Failed to delete prompt');
-                    fetchPromptsForCharacter(characterId, characterName); // Refresh
-                } catch (error) {
-                    console.error('Error deleting prompt:', error);
-                    alert('Could not delete the prompt.');
-                }
-            }
+        charPrompts.forEach(prompt => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <p><strong>Prompt:</strong> ${prompt.prompt}</p>
+                <p><strong>Caption:</strong> ${prompt.caption || 'N/A'}</p>
+                <small>Posted: ${prompt.used ? 'Yes' : 'No'}</small>
+                <div class="card-actions">
+                    <button class="delete-prompt-btn delete-btn" data-id="${prompt.id}">Delete</button>
+                </div>
+            `;
+            container.appendChild(card);
         });
-    });
+
+        container.querySelectorAll('.delete-prompt-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const promptId = e.target.dataset.id;
+                if (confirm('Are you sure you want to delete this prompt?')) {
+                    const deleteResponse = await fetch(`/api/prompts/${promptId}`, { method: 'DELETE' });
+                    if (deleteResponse.ok) {
+                        // Refresh the gallery content
+                        window.hideDialog();
+                        showContentGallery(characterId, characterName);
+                    } else {
+                        alert('Failed to delete prompt.');
+                    }
+                }
+            });
+        });
+
+    } catch (error) {
+        console.error(error);
+        galleryContent.innerHTML = `<p class="error">${error.message}</p>`;
+    }
 }
 
-
+// --- Status Tab ---
 async function fetchStatus() {
-    const grid = document.getElementById('status-grid');
-    grid.innerHTML = '<p>Loading system status...</p>';
+    const panel = document.getElementById('status-panel');
+    panel.innerHTML = `<h2>System Status</h2><div class="card-container">Loading...</div>`;
     try {
         const response = await fetch('/api/system/status');
-        const data = await response.json();
-        renderStatus(data);
+        if (!response.ok) throw new Error('Failed to fetch system status');
+        const status = await response.json();
+
+        const container = panel.querySelector('.card-container');
+        container.innerHTML = '';
+        Object.entries(status).forEach(([key, value]) => {
+            const card = document.createElement('div');
+            card.className = 'card status-card';
+            const isOk = value === 'OK' || value === 'Connected' || value === 'Running' || value === 'Configured';
+            card.innerHTML = `
+                <h3>${key.replace('_', ' ').toUpperCase()}</h3>
+                <p style="color: ${isOk ? 'var(--accent-primary)' : 'var(--accent-danger)'}">${value}</p>
+            `;
+            container.appendChild(card);
+            makeDraggable(card); // Make the status card draggable
+        });
+
     } catch (error) {
-        console.error('Failed to fetch system status:', error);
-        grid.innerHTML = `<p class="error">Failed to fetch system status.</p>`;
-    }
-}
-
-function renderStatus(data) {
-    const grid = document.getElementById('status-grid');
-    grid.innerHTML = ''; // Clear old data
-    grid.style.display = 'grid';
-    grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(200px, 1fr))';
-    grid.style.gap = '1rem';
-
-
-    Object.entries(data).forEach(([key, value]) => {
-        const isOk = value === 'OK' || value === 'Connected' || value === 'Running' || value === 'Configured';
-        const statusClass = isOk ? 'status-ok' : 'status-error';
-
-        const item = document.createElement('div');
-        item.className = 'card';
-        item.innerHTML = `
-            <h3>${key.replace('_', ' ').toUpperCase()}</h3>
-            <p class="${statusClass}" style="font-weight: bold; color: ${isOk ? '#4ade80' : '#f87171'};">${value}</p>
-        `;
-        grid.appendChild(item);
-    });
-}
-
-function fetchSettings() {
-    const settingsForm = document.getElementById('settings-form');
-    settingsForm.innerHTML = `
-        <p>Application settings and API key management will be available here in a future update.</p>
-        <p>For now, please configure settings in the <code>.env</code> file.</p>
-    `;
-}
-
-// A placeholder for now, will be expanded in later steps
-async function fetchDataForTab(tabName) {
-    console.log(`Fetching data for ${tabName}...`);
-    if (tabName === 'characters') {
-        await fetchCharacters();
-    } else if (tabName === 'models') {
-        await fetchModels();
-    } else if (tabName === 'content') {
-        await fetchContent();
-    } else if (tabName === 'status') {
-        await fetchStatus();
-    } else if (tabName === 'settings') {
-        fetchSettings();
+        console.error(error);
+        panel.querySelector('.card-container').innerHTML = `<p class="error">${error.message}</p>`;
     }
 }
